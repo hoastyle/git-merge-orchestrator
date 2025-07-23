@@ -16,7 +16,7 @@ class GitMergeTool:
         self.integration_branch = f"integration-{source_branch.replace('/', '-')}-{target_branch.replace('/', '-')}"
         self.work_dir = self.repo_path / ".merge_work"
         self.work_dir.mkdir(exist_ok=True)
-        
+
         # 缓存活跃用户列表
         self._active_contributors_cache = None
         self._all_contributors_cache = None
@@ -38,19 +38,19 @@ class GitMergeTool:
         """获取近N个月有提交的活跃贡献者列表"""
         if self._active_contributors_cache is not None:
             return self._active_contributors_cache
-            
+
         print(f"🔍 正在分析近{months}个月的活跃贡献者...")
         cutoff_date = (datetime.now() - timedelta(days=months * 30)).strftime('%Y-%m-%d')
-        
+
         cmd = f'git log --since="{cutoff_date}" --format="%an" --all'
         result = self.run_git_command(cmd)
-        
+
         active_contributors = set()
         if result:
             for author in result.split('\n'):
                 if author.strip():
                     active_contributors.add(author.strip())
-        
+
         self._active_contributors_cache = active_contributors
         print(f"📊 发现 {len(active_contributors)} 位近{months}个月活跃的贡献者")
         return active_contributors
@@ -59,16 +59,16 @@ class GitMergeTool:
         """获取所有历史贡献者"""
         if self._all_contributors_cache is not None:
             return self._all_contributors_cache
-            
+
         cmd = 'git log --format="%an" --all'
         result = self.run_git_command(cmd)
-        
+
         all_contributors = set()
         if result:
             for author in result.split('\n'):
                 if author.strip():
                     all_contributors.add(author.strip())
-        
+
         self._all_contributors_cache = all_contributors
         return all_contributors
 
@@ -76,38 +76,38 @@ class GitMergeTool:
         """分析目录级别的主要贡献者"""
         try:
             contributors = {}
-            
+
             # 获取目录下所有文件的贡献者信息
             if include_recent:
                 one_year_ago = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
                 recent_cmd = f'git log --follow --since="{one_year_ago}" --format="%an" -- "{directory_path}"'
                 recent_result = self.run_git_command(recent_cmd)
-                
+
                 if recent_result:
                     recent_authors = recent_result.split('\n')
                     recent_author_counts = {}
                     for author in recent_authors:
                         if author.strip():
                             recent_author_counts[author] = recent_author_counts.get(author, 0) + 1
-                    
+
                     for author, count in recent_author_counts.items():
                         contributors[author] = {
                             'total_commits': count,
                             'recent_commits': count,
                             'score': count * 3
                         }
-            
+
             # 获取总体贡献统计
             cmd = f'git log --follow --format="%an" -- "{directory_path}"'
             total_result = self.run_git_command(cmd)
-            
+
             if total_result:
                 authors = total_result.split('\n')
                 author_counts = {}
                 for author in authors:
                     if author.strip():
                         author_counts[author] = author_counts.get(author, 0) + 1
-                
+
                 for author, count in author_counts.items():
                     if author in contributors:
                         contributors[author]['total_commits'] = count
@@ -118,7 +118,7 @@ class GitMergeTool:
                             'recent_commits': 0,
                             'score': count
                         }
-            
+
             return contributors
         except Exception as e:
             print(f"分析目录 {directory_path} 时出错: {e}")
@@ -127,10 +127,10 @@ class GitMergeTool:
     def find_fallback_assignee(self, file_paths, active_contributors):
         """为未分配的组寻找备选负责人"""
         print(f"🔍 正在为未分配组寻找备选负责人...")
-        
+
         # 尝试从文件路径向上查找目录贡献者
         directories_to_check = set()
-        
+
         for file_path in file_paths:
             path_parts = file_path.split('/')
             # 检查各级父目录
@@ -138,27 +138,27 @@ class GitMergeTool:
                 parent_dir = '/'.join(path_parts[:i])
                 if parent_dir:
                     directories_to_check.add(parent_dir)
-        
+
         # 按目录层级排序，优先检查更具体的目录
         sorted_dirs = sorted(directories_to_check, key=lambda x: x.count('/'), reverse=True)
-        
+
         for directory in sorted_dirs:
             print(f"  检查目录: {directory}")
             dir_contributors = self.analyze_directory_contributors(directory)
-            
+
             if dir_contributors:
                 # 找到活跃的贡献者
                 active_dir_contributors = {
                     author: stats for author, stats in dir_contributors.items()
                     if author in active_contributors
                 }
-                
+
                 if active_dir_contributors:
                     # 返回评分最高的活跃贡献者
                     best_contributor = max(active_dir_contributors.items(), key=lambda x: x[1]['score'])
                     print(f"  ✅ 在目录 {directory} 找到候选人: {best_contributor[0]} (得分: {best_contributor[1]['score']})")
                     return best_contributor[0], best_contributor[1], directory
-        
+
         # 如果都没找到，检查根目录
         print("  检查根目录...")
         root_contributors = self.analyze_directory_contributors(".")
@@ -167,19 +167,19 @@ class GitMergeTool:
                 author: stats for author, stats in root_contributors.items()
                 if author in active_contributors
             }
-            
+
             if active_root_contributors:
                 best_contributor = max(active_root_contributors.items(), key=lambda x: x[1]['score'])
                 print(f"  ✅ 在根目录找到候选人: {best_contributor[0]} (得分: {best_contributor[1]['score']})")
                 return best_contributor[0], best_contributor[1], "根目录"
-        
+
         print("  ❌ 未找到合适的候选人")
         return None, None, None
 
     def analyze_divergence(self):
         """分析分支分叉情况"""
         print("🔍 正在分析分支分叉情况...")
-        
+
         # 获取分叉点
         merge_base = self.run_git_command(f"git merge-base {self.source_branch} {self.target_branch}")
         if merge_base:
@@ -187,15 +187,15 @@ class GitMergeTool:
         else:
             print("❌ 无法确定分叉点")
             return None
-        
+
         # 统计差异
         diff_stats = self.run_git_command(f"git diff --stat {self.source_branch} {self.target_branch}")
         if diff_stats:
             print(f"\n📊 差异统计:\n{diff_stats}")
-        
+
         # 检查集成分支是否存在
         branch_exists = self.run_git_command(f"git show-ref --verify --quiet refs/heads/{self.integration_branch}")
-        
+
         if branch_exists is None:
             # 分支不存在，创建新分支
             self.run_git_command(f"git checkout -b {self.integration_branch} {self.target_branch}")
@@ -204,13 +204,13 @@ class GitMergeTool:
             # 分支已存在，切换到该分支
             self.run_git_command(f"git checkout {self.integration_branch}")
             print(f"✅ 已切换到集成分支: {self.integration_branch}")
-        
+
         # 预览合并结果
         merge_result = self.run_git_command(f"git merge --no-commit --no-ff {self.source_branch} 2>&1 || echo 'merge conflicts detected'")
-        
+
         # 重置合并状态
         self.run_git_command("git merge --abort 2>/dev/null || true")
-        
+
         return {
             "merge_base": merge_base,
             "diff_stats": diff_stats,
@@ -220,29 +220,29 @@ class GitMergeTool:
     def iterative_group_files(self, file_paths):
         """迭代式分组文件，避免递归深度问题"""
         print(f"🔄 使用迭代算法处理 {len(file_paths)} 个文件...")
-        
+
         # 按目录层次分析文件
         path_analysis = {}
         for file_path in file_paths:
             parts = file_path.split('/')
             depth = len(parts) - 1
-            
+
             if depth == 0:
                 key = "root"
             else:
                 key = parts[0]
-            
+
             if key not in path_analysis:
                 path_analysis[key] = []
             path_analysis[key].append(file_path)
-        
+
         print(f"📊 发现 {len(path_analysis)} 个顶级目录/分组")
-        
+
         groups = []
-        
+
         for base_path, files in path_analysis.items():
             print(f" 处理 {base_path}: {len(files)} 个文件")
-            
+
             if len(files) <= self.max_files_per_group:
                 groups.append({
                     "name": base_path,
@@ -253,21 +253,21 @@ class GitMergeTool:
             else:
                 sub_groups = self._split_large_group(base_path, files)
                 groups.extend(sub_groups)
-        
+
         print(f"✅ 分组完成：共 {len(groups)} 个组")
         return groups
 
     def _split_large_group(self, base_path, files):
         """分割大文件组为小组"""
         groups = []
-        
+
         if base_path == "root":
             return self._split_by_alphabet(base_path, files)
-        
+
         # 非根目录：先按子目录分组
         subdir_groups = defaultdict(list)
         direct_files = []
-        
+
         for file_path in files:
             if file_path.startswith(base_path + "/"):
                 relative_path = file_path[len(base_path + "/"):]
@@ -278,7 +278,7 @@ class GitMergeTool:
                     direct_files.append(file_path)
             else:
                 direct_files.append(file_path)
-        
+
         # 处理直接文件
         if direct_files:
             if len(direct_files) <= self.max_files_per_group:
@@ -291,7 +291,7 @@ class GitMergeTool:
             else:
                 batch_groups = self._split_into_batches(f"{base_path}/direct", direct_files)
                 groups.extend(batch_groups)
-        
+
         # 处理子目录
         for subdir_path, subdir_files in subdir_groups.items():
             if len(subdir_files) <= self.max_files_per_group:
@@ -304,7 +304,7 @@ class GitMergeTool:
             else:
                 sub_groups = self._split_large_group(subdir_path, subdir_files)
                 groups.extend(sub_groups)
-        
+
         return groups
 
     def _split_by_alphabet(self, base_name, files):
@@ -313,14 +313,14 @@ class GitMergeTool:
         for file_path in files:
             filename = file_path.split('/')[-1]
             first_char = filename[0].lower()
-            
+
             if first_char.isalpha():
                 alpha_groups[first_char].append(file_path)
             elif first_char.isdigit():
                 alpha_groups['0-9'].append(file_path)
             else:
                 alpha_groups['other'].append(file_path)
-        
+
         groups = []
         for alpha, alpha_files in alpha_groups.items():
             if len(alpha_files) <= self.max_files_per_group:
@@ -333,7 +333,7 @@ class GitMergeTool:
             else:
                 batch_groups = self._split_into_batches(f"{base_name}-{alpha}", alpha_files)
                 groups.extend(batch_groups)
-        
+
         return groups
 
     def _split_into_batches(self, base_name, files):
@@ -354,38 +354,38 @@ class GitMergeTool:
         """分析文件的主要贡献者（重点关注一年内的贡献）"""
         try:
             contributors = {}
-            
+
             # 获取一年内的贡献统计 (重点)
             if include_recent:
                 one_year_ago = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
                 recent_cmd = f'git log --follow --since="{one_year_ago}" --format="%an" -- "{filepath}"'
                 recent_result = self.run_git_command(recent_cmd)
-                
+
                 if recent_result:
                     recent_authors = recent_result.split('\n')
                     recent_author_counts = {}
                     for author in recent_authors:
                         if author.strip():
                             recent_author_counts[author] = recent_author_counts.get(author, 0) + 1
-                    
+
                     for author, count in recent_author_counts.items():
                         contributors[author] = {
                             'total_commits': count,
                             'recent_commits': count,
                             'score': count * 3
                         }
-            
+
             # 获取总体贡献统计 (补充)
             cmd = f'git log --follow --format="%an" -- "{filepath}"'
             total_result = self.run_git_command(cmd)
-            
+
             if total_result:
                 authors = total_result.split('\n')
                 author_counts = {}
                 for author in authors:
                     if author.strip():
                         author_counts[author] = author_counts.get(author, 0) + 1
-                
+
                 for author, count in author_counts.items():
                     if author in contributors:
                         contributors[author]['total_commits'] = count
@@ -396,7 +396,7 @@ class GitMergeTool:
                             'recent_commits': 0,
                             'score': count
                         }
-            
+
             return contributors
         except Exception as e:
             print(f"分析文件 {filepath} 时出错: {e}")
@@ -405,7 +405,7 @@ class GitMergeTool:
     def get_group_main_contributor(self, files):
         """获取文件组的主要贡献者（重点基于一年内贡献）"""
         all_contributors = {}
-        
+
         for file in files:
             contributors = self.analyze_file_contributors(file)
             for author, stats in contributors.items():
@@ -416,15 +416,15 @@ class GitMergeTool:
                         'score': 0,
                         'file_count': 0
                     }
-                
+
                 all_contributors[author]['total_commits'] += stats['total_commits']
                 all_contributors[author]['recent_commits'] += stats['recent_commits']
                 all_contributors[author]['score'] += stats['score']
                 all_contributors[author]['file_count'] += 1
-        
+
         if not all_contributors:
             return None, {}
-        
+
         # 返回综合得分最高的作者（重点是近期贡献）
         main_contributor = max(all_contributors.items(), key=lambda x: x[1]['score'])
         return main_contributor[0], all_contributors
@@ -432,22 +432,22 @@ class GitMergeTool:
     def create_merge_plan(self):
         """创建智能合并计划 - 迭代分组直至文件数<5，避免递归深度问题"""
         print(f"📋 正在创建智能合并计划（每组最多{self.max_files_per_group}个文件）...")
-        
+
         # 获取所有变更文件
         changed_files_output = self.run_git_command(f"git diff --name-only {self.source_branch} {self.target_branch}")
         if not changed_files_output:
             print("⚠️ 没有发现文件差异")
             return None
-        
+
         changed_files = changed_files_output.split('\n')
         changed_files = [f for f in changed_files if f.strip()]
-        
+
         if not changed_files:
             print("⚠️ 没有发现有效的文件差异")
             return None
-        
+
         print(f"🔍 发现 {len(changed_files)} 个变更文件，开始智能分组...")
-        
+
         # 迭代分组文件（避免递归深度问题）
         try:
             file_groups = self.iterative_group_files(changed_files)
@@ -465,13 +465,13 @@ class GitMergeTool:
                     "file_count": len(batch_files),
                     "type": "fallback_batch"
                 })
-        
+
         print(f"📊 分组完成: {len(file_groups)} 个组")
         for i, group in enumerate(file_groups[:10]):
             print(f" - {group['name']}: {group['file_count']} 个文件 ({group['type']})")
         if len(file_groups) > 10:
             print(f" ... 还有 {len(file_groups) - 10} 个组")
-        
+
         # 生成合并计划
         merge_plan = {
             "created_at": datetime.now().isoformat(),
@@ -483,7 +483,7 @@ class GitMergeTool:
             "max_files_per_group": self.max_files_per_group,
             "groups": []
         }
-        
+
         for group_info in file_groups:
             merge_plan["groups"].append({
                 "name": group_info["name"],
@@ -497,70 +497,70 @@ class GitMergeTool:
                 "contributors": {},
                 "fallback_reason": ""
             })
-        
+
         # 保存计划
         plan_file = self.work_dir / "merge_plan.json"
         with open(plan_file, 'w', encoding='utf-8') as f:
             json.dump(merge_plan, f, indent=2, ensure_ascii=False)
-        
+
         print(f"✅ 智能合并计划已保存至: {plan_file}")
         print(f"📁 共生成 {len(file_groups)} 个分组，平均每组 {len(changed_files)/len(file_groups):.1f} 个文件")
-        
+
         # 显示分组统计
         group_types = defaultdict(int)
         for group in file_groups:
             group_types[group["type"]] += 1
-        
+
         print(f"📊 分组类型统计:")
         for group_type, count in group_types.items():
             print(f" - {group_type}: {count} 个组")
-        
+
         return merge_plan
 
     def auto_assign_tasks(self, exclude_authors=None, max_tasks_per_person=3, include_fallback=True):
         """基于一年内贡献度自动分配合并任务，支持备选方案和活跃度过滤"""
         exclude_authors = exclude_authors or []
         plan_file = self.work_dir / "merge_plan.json"
-        
+
         if not plan_file.exists():
             print("❌ 合并计划文件不存在，请先运行创建合并计划")
             return None
-        
+
         with open(plan_file, 'r', encoding='utf-8') as f:
             plan = json.load(f)
-        
+
         print("🤖 正在基于一年内贡献度自动分配任务...")
         print("💡 评分规则：一年内提交数 × 3 + 历史提交数 × 1")
         print("🔍 自动排除近3个月无提交的人员")
-        
+
         # 获取活跃贡献者
         active_contributors = self.get_active_contributors(3)
-        
+
         # 自动添加不活跃的人员到排除列表
         all_contributors = self.get_all_contributors()
         inactive_contributors = all_contributors - active_contributors
-        
+
         if inactive_contributors:
             print(f"🚫 自动排除近3个月无提交的 {len(inactive_contributors)} 位贡献者:")
             for contributor in sorted(list(inactive_contributors))[:5]:
                 print(f"   - {contributor}")
             if len(inactive_contributors) > 5:
                 print(f"   ... 还有 {len(inactive_contributors) - 5} 位")
-        
+
         # 合并排除列表
         all_excluded = set(exclude_authors) | inactive_contributors
-        
+
         assignment_count = {}
         unassigned_groups = []
-        
+
         for group in plan["groups"]:
             print(f"\n分析组: {group['name']} ({group['file_count']} 个文件)")
-            
+
             # 获取主要贡献者（重点关注一年内）
             main_contributor, all_contributors = self.get_group_main_contributor(group['files'])
-            
+
             assigned = False
-            
+
             if main_contributor and main_contributor not in all_excluded:
                 # 检查负载均衡
                 current_count = assignment_count.get(main_contributor, 0)
@@ -583,12 +583,12 @@ class GitMergeTool:
                             print(f" (原推荐 {main_contributor} 已满负荷)")
                             assigned = True
                             break
-            
+
             # 如果还未分配且启用备选方案，尝试目录级分配
             if not assigned and include_fallback:
                 print(f" 🔄 启用备选分配方案...")
                 fallback_assignee, fallback_stats, fallback_source = self.find_fallback_assignee(group['files'], active_contributors)
-                
+
                 if fallback_assignee and fallback_assignee not in all_excluded:
                     current_count = assignment_count.get(fallback_assignee, 0)
                     if current_count < max_tasks_per_person:
@@ -598,7 +598,7 @@ class GitMergeTool:
                         print(f" ✅ 备选分配给: {fallback_assignee} (来源: {fallback_source})")
                         print(f" 目录贡献 - 一年内: {fallback_stats['recent_commits']}, 历史: {fallback_stats['total_commits']}, 得分: {fallback_stats['score']}")
                         assigned = True
-            
+
             if not assigned:
                 unassigned_groups.append(group['name'])
                 if main_contributor:
@@ -617,14 +617,14 @@ class GitMergeTool:
                 else:
                     print(f" ⚠️ 无法确定主要贡献者，请手动分配")
                     group["notes"] = "无法确定主要贡献者"
-            
+
             # 保存贡献者信息
             group["contributors"] = all_contributors
-        
+
         # 保存更新后的计划
         with open(plan_file, 'w', encoding='utf-8') as f:
             json.dump(plan, f, indent=2, ensure_ascii=False)
-        
+
         # 显示分配总结
         print(f"\n📊 自动分配总结:")
         print(f"🎯 活跃贡献者: {len(active_contributors)} 位")
@@ -633,10 +633,10 @@ class GitMergeTool:
         print(f"\n👥 任务分配:")
         for person, count in sorted(assignment_count.items(), key=lambda x: x[1], reverse=True):
             print(f" {person}: {count} 个任务")
-        
+
         if unassigned_groups:
             print(f"\n⚠️ 未分配的组 ({len(unassigned_groups)}个): {', '.join(unassigned_groups[:3])}" + ("..." if len(unassigned_groups) > 3 else ""))
-        
+
         print("✅ 智能自动分配完成")
         return plan
 
@@ -644,24 +644,24 @@ class GitMergeTool:
         """分配合并任务（手动或自动）"""
         if assignments is None:
             return self.auto_assign_tasks()
-        
+
         plan_file = self.work_dir / "merge_plan.json"
         if not plan_file.exists():
             print("❌ 合并计划文件不存在，请先运行创建合并计划")
             return None
-        
+
         with open(plan_file, 'r', encoding='utf-8') as f:
             plan = json.load(f)
-        
+
         for group_name, assignee in assignments.items():
             for group in plan["groups"]:
                 if group["name"] == group_name:
                     group["assignee"] = assignee
                     break
-        
+
         with open(plan_file, 'w', encoding='utf-8') as f:
             json.dump(plan, f, indent=2, ensure_ascii=False)
-        
+
         print("✅ 任务分配完成")
         return plan
 
@@ -671,31 +671,31 @@ class GitMergeTool:
         if not plan_file.exists():
             print("❌ 合并计划文件不存在，请先运行创建合并计划")
             return []
-        
+
         with open(plan_file, 'r', encoding='utf-8') as f:
             plan = json.load(f)
-        
+
         assignee_groups = []
         total_files = 0
-        
+
         for group in plan["groups"]:
             if group.get("assignee", "").lower() == assignee_name.lower():
                 assignee_groups.append(group)
                 total_files += group.get("file_count", len(group["files"]))
-        
+
         if not assignee_groups:
             print(f"📋 负责人 '{assignee_name}' 暂无分配的任务")
             return []
-        
+
         print(f"👤 负责人: {assignee_name}")
         print(f"📊 总览: {len(assignee_groups)} 个组, {total_files} 个文件")
         print("-" * 80)
         print(f"{'组名':<25} {'文件数':<8} {'状态':<8} {'类型':<15} {'备注'}")
         print("-" * 80)
-        
+
         completed = 0
         pending = 0
-        
+
         for group in assignee_groups:
             status = group.get("status", "pending")
             status_icon = "✅" if status == "completed" else "🔄"
@@ -703,22 +703,22 @@ class GitMergeTool:
             group_type = group.get("group_type", "unknown")
             notes = group.get("notes", "")
             fallback_reason = group.get("fallback_reason", "")
-            
+
             if status == "completed":
                 completed += 1
             else:
                 pending += 1
-            
+
             # 显示备注
             display_notes = notes
             if fallback_reason:
                 display_notes = f"[备选] {fallback_reason}"
-            
+
             print(f"{group['name']:<25} {file_count:<8} {status_icon:<8} {group_type:<15} {display_notes[:30]}")
-        
+
         print("-" * 80)
         print(f"📈 进度: {completed}/{len(assignee_groups)} 组已完成, {pending} 组待处理")
-        
+
         # 显示详细文件列表
         if len(assignee_groups) <= 3:  # 只有少量组时显示详细信息
             print(f"\n📄 详细文件列表:")
@@ -728,30 +728,30 @@ class GitMergeTool:
                     print(f"   - {file}")
                 if len(group['files']) > 5:
                     print(f"   ... 还有 {len(group['files']) - 5} 个文件")
-        
+
         return assignee_groups
 
     def create_merge_branch(self, group_name, assignee):
         """为指定任务创建合并分支"""
         branch_name = f"merge-{group_name.replace('/', '-')}-{assignee.replace(' ', '-')}"
-        
+
         # 创建工作分支
         self.run_git_command(f"git checkout {self.integration_branch}")
         result = self.run_git_command(f"git checkout -b {branch_name}")
-        
+
         if result is not None:
             print(f"✅ 已创建合并分支: {branch_name}")
         else:
             print(f"⚠️ 分支 {branch_name} 可能已存在，正在切换")
             self.run_git_command(f"git checkout {branch_name}")
-        
+
         return branch_name
 
     def check_file_existence(self, files, branch):
         """检查文件在指定分支中是否存在"""
         existing_files = []
         missing_files = []
-        
+
         for file in files:
             # 检查文件是否在指定分支中存在
             result = self.run_git_command(f"git cat-file -e {branch}:{file} 2>/dev/null")
@@ -759,18 +759,18 @@ class GitMergeTool:
                 existing_files.append(file)
             else:
                 missing_files.append(file)
-        
+
         return existing_files, missing_files
-    
+
     def generate_smart_merge_script(self, group_name, assignee, files, branch_name):
         """生成智能合并脚本，处理新文件和已存在文件"""
         # 检查文件存在性
         existing_files, missing_files = self.check_file_existence(files, self.target_branch)
-        
+
         print(f"📊 文件分析:")
         print(f"  - 已存在文件: {len(existing_files)} 个")
         print(f"  - 新增文件: {len(missing_files)} 个")
-        
+
         # 生成处理脚本
         script_content = f"""#!/bin/bash
 # 智能合并脚本 - {group_name} (负责人: {assignee})
@@ -884,7 +884,7 @@ else
     exit 1
 fi
 """
-        
+
         return script_content
 
     def merge_group(self, group_name):
@@ -893,43 +893,98 @@ fi
         if not plan_file.exists():
             print("❌ 合并计划文件不存在，请先运行创建合并计划")
             return False
-        
+
         with open(plan_file, 'r', encoding='utf-8') as f:
             plan = json.load(f)
-        
+
         # 找到对应组
         group_info = None
         for group in plan["groups"]:
             if group["name"] == group_name:
                 group_info = group
                 break
-        
+
         if not group_info:
             print(f"❌ 未找到组: {group_name}")
             return False
-        
+
         assignee = group_info["assignee"]
         if not assignee:
             print(f"❌ 组 {group_name} 尚未分配负责人")
             return False
-        
+
         # 创建合并分支
         branch_name = self.create_merge_branch(group_name, assignee)
-        
+
         # 生成智能合并脚本
         script_content = self.generate_smart_merge_script(
             group_name, assignee, group_info["files"], branch_name
         )
-        
+
         script_file = self.work_dir / f"merge_{group_name.replace('/', '_')}.sh"
         with open(script_file, 'w') as f:
             f.write(script_content)
-        
+
         os.chmod(script_file, 0o755)
-        
+
         print(f"✅ 已生成智能合并脚本: {script_file}")
         print(f"🎯 请执行: ./{script_file}")
-        
+
+        return True
+
+    def finalize_merge(self):
+        """完成最终合并"""
+        print("🎯 开始最终合并...")
+
+        plan_file = self.work_dir / "merge_plan.json"
+        if not plan_file.exists():
+            print("❌ 合并计划文件不存在")
+            return False
+
+        with open(plan_file, 'r', encoding='utf-8') as f:
+            plan = json.load(f)
+
+        # 切换到集成分支
+        self.run_git_command(f"git checkout {self.integration_branch}")
+
+        # 检查哪些分支已完成
+        completed_branches = []
+        for group in plan["groups"]:
+            if group["status"] == "completed" and group.get("assignee"):
+                branch_name = f"merge-{group['name'].replace('/', '-')}-{group['assignee'].replace(' ', '-')}"
+                # 检查分支是否存在
+                if self.run_git_command(f"git show-ref --verify --quiet refs/heads/{branch_name}") is not None:
+                    completed_branches.append((branch_name, group))
+
+        if not completed_branches:
+            print("⚠️ 没有找到已完成的合并分支")
+            return False
+
+        print(f"🔍 发现 {len(completed_branches)} 个已完成的分支:")
+        total_files = 0
+        for branch_name, group in completed_branches:
+            file_count = group.get('file_count', len(group['files']))
+            total_files += file_count
+            print(f" - {branch_name} ({file_count} 文件)")
+
+        print(f"📊 总计将合并 {total_files} 个文件")
+
+        # 合并所有完成的分支
+        for branch_name, group in completed_branches:
+            print(f"🔄 正在合并分支: {branch_name}")
+            result = self.run_git_command(f"git merge --no-ff -m 'Merge branch {branch_name}: {group['name']}' {branch_name}")
+            if result is not None:
+                print(f" ✅ 成功合并 {branch_name}")
+            else:
+                print(f" ❌ 合并 {branch_name} 时出现问题")
+                return False
+
+        print("🎉 最终合并完成!")
+        print(f"📋 集成分支 {self.integration_branch} 已包含所有更改")
+        print(f"🚀 建议操作:")
+        print(f" 1. 验证合并结果: git log --oneline -10")
+        print(f" 2. 推送到远程: git push origin {self.integration_branch}")
+        print(f" 3. 创建PR/MR合并到 {self.target_branch}")
         return True
 
     def merge_assignee_tasks(self, assignee_name):
@@ -938,50 +993,50 @@ fi
         if not plan_file.exists():
             print("❌ 合并计划文件不存在，请先运行创建合并计划")
             return False
-        
+
         with open(plan_file, 'r', encoding='utf-8') as f:
             plan = json.load(f)
-        
+
         # 找到负责人的所有任务
         assignee_groups = []
         for group in plan["groups"]:
             if group.get("assignee", "").lower() == assignee_name.lower():
                 assignee_groups.append(group)
-        
+
         if not assignee_groups:
             print(f"❌ 负责人 '{assignee_name}' 没有分配的任务")
             return False
-        
+
         print(f"🎯 开始批量合并负责人 '{assignee_name}' 的所有任务...")
         print(f"📋 共 {len(assignee_groups)} 个组，总计 {sum(g.get('file_count', len(g['files'])) for g in assignee_groups)} 个文件")
-        
+
         # 收集所有文件
         all_files = []
         for group in assignee_groups:
             all_files.extend(group["files"])
-        
+
         if not all_files:
             print("❌ 没有找到需要合并的文件")
             return False
-        
+
         # 检查文件存在性
         existing_files, missing_files = self.check_file_existence(all_files, self.target_branch)
-        
+
         print(f"📊 批量合并文件分析:")
         print(f"  - 已存在文件: {len(existing_files)} 个")
         print(f"  - 新增文件: {len(missing_files)} 个")
-        
+
         # 创建统一的合并分支
         batch_branch_name = f"merge-batch-{assignee_name.replace(' ', '-')}-{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        
+
         print(f"\n🌿 创建批量合并分支: {batch_branch_name}")
         self.run_git_command(f"git checkout {self.integration_branch}")
         result = self.run_git_command(f"git checkout -b {batch_branch_name}")
-        
+
         if result is None:
             print(f"⚠️ 分支创建可能失败，尝试切换到现有分支")
             self.run_git_command(f"git checkout {batch_branch_name}")
-        
+
         # 生成智能批量合并脚本
         script_content = f"""#!/bin/bash
 # 批量智能合并脚本 - 负责人: {assignee_name}
@@ -1084,16 +1139,16 @@ else
     exit 1
 fi
 """
-        
+
         script_file = self.work_dir / f"merge_batch_{assignee_name.replace(' ', '_')}.sh"
         with open(script_file, 'w') as f:
             f.write(script_content)
-        
+
         os.chmod(script_file, 0o755)
-        
+
         print(f"✅ 已生成智能批量合并脚本: {script_file}")
         print(f"🎯 请执行: ./{script_file}")
-        
+
         return True
 
     def check_status(self):
@@ -1102,10 +1157,10 @@ fi
         if not plan_file.exists():
             print("❌ 合并计划文件不存在，请先运行创建合并计划")
             return
-        
+
         with open(plan_file, 'r', encoding='utf-8') as f:
             plan = json.load(f)
-        
+
         print("📊 智能合并状态概览:")
         print(f"源分支: {plan['source_branch']}")
         print(f"目标分支: {plan['target_branch']}")
@@ -1113,32 +1168,32 @@ fi
         print(f"总文件数: {plan['total_files']}")
         print(f"每组最大文件数: {plan.get('max_files_per_group', 5)}")
         print()
-        
+
         assigned_count = 0
         completed_count = 0
         total_groups = len(plan["groups"])
         total_files_assigned = 0
         fallback_assigned = 0
-        
+
         print("📋 智能分组与任务分配状态:")
         print("-" * 120)
         print(f"{'组名':<25} {'文件数':<6} {'负责人':<15} {'状态':<6} {'一年内贡献':<12} {'推荐理由':<30}")
         print("-" * 120)
-        
+
         for group in plan["groups"]:
             status_icon = "✅" if group["status"] == "completed" else "🔄" if group.get("assignee") else "⏳"
             assignee = group.get("assignee", "未分配")
             file_count = group.get("file_count", len(group["files"]))
-            
+
             # 获取推荐信息
             recommended_info = "N/A"
             recent_commits = "N/A"
-            
+
             # 检查是否是备选分配
             is_fallback = bool(group.get("fallback_reason", ""))
             if is_fallback:
                 fallback_assigned += 1
-            
+
             if assignee != "未分配" and 'contributors' in group and group['contributors']:
                 if assignee in group['contributors']:
                     contributor_stats = group['contributors'][assignee]
@@ -1165,23 +1220,23 @@ fi
                             recommended_info = f"推荐:{contributor_name}({stats})"
                     except:
                         recommended_info = "分析中..."
-            
+
             print(f"{group['name']:<25} {file_count:<6} {assignee:<15} {status_icon:<6} {recent_commits:<12} {recommended_info:<30}")
-            
+
             if assignee != "未分配":
                 assigned_count += 1
                 total_files_assigned += file_count
                 if group["status"] == "completed":
                     completed_count += 1
-        
+
         print("-" * 120)
         print(f"📈 进度统计: {assigned_count}/{total_groups} 组已分配 ({total_files_assigned}/{plan['total_files']} 文件), {completed_count}/{total_groups} 组已完成")
         print(f"🔄 备选分配: {fallback_assigned} 组通过目录分析分配")
-        
+
         if assigned_count < total_groups:
             unassigned = [g['name'] for g in plan['groups'] if not g.get('assignee')]
             print(f"\n⚠️ 未分配的组: {', '.join(unassigned[:5])}" + ("..." if len(unassigned) > 5 else ""))
-        
+
         # 显示负载分布
         assignee_workload = {}
         for group in plan["groups"]:
@@ -1195,7 +1250,7 @@ fi
                     assignee_workload[assignee]["completed"] += 1
                 if group.get("fallback_reason"):
                     assignee_workload[assignee]["fallback"] += 1
-        
+
         if assignee_workload:
             print(f"\n👥 负载分布:")
             for person, workload in sorted(assignee_workload.items(), key=lambda x: x[1]["files"], reverse=True):
@@ -1208,26 +1263,26 @@ fi
         if not plan_file.exists():
             print("❌ 合并计划文件不存在，请先运行创建合并计划")
             return
-        
+
         with open(plan_file, 'r', encoding='utf-8') as f:
             plan = json.load(f)
-        
+
         print("\n👥 智能贡献者分析报告 (重点关注一年内活跃度):")
         print("=" * 90)
         print("💡 评分规则：一年内提交数 × 3 + 历史总提交数 × 1")
         print("🎯 分配策略：优先分配给近期活跃且熟悉相关文件的开发者")
         print("🚫 自动排除：近3个月无提交的人员")
-        
+
         # 获取活跃贡献者信息
         active_contributors = self.get_active_contributors(3)
         all_contributors_global = {}
-        
+
         for group in plan["groups"]:
             print(f"\n📁 组: {group['name']} ({group.get('file_count', len(group['files']))} 文件)")
-            
+
             assignee = group.get('assignee', '未分配')
             fallback_reason = group.get('fallback_reason', '')
-            
+
             if assignee != '未分配':
                 if fallback_reason:
                     print(f" 当前分配: {assignee} [备选分配: {fallback_reason}]")
@@ -1235,7 +1290,7 @@ fi
                     print(f" 当前分配: {assignee}")
             else:
                 print(f" 当前分配: 未分配")
-            
+
             if 'contributors' in group and group['contributors']:
                 print(" 贡献者排名 (一年内|历史总计|综合得分|活跃状态):")
                 sorted_contributors = sorted(
@@ -1248,7 +1303,7 @@ fi
                         recent = stats['recent_commits']
                         total = stats['total_commits']
                         score = stats['score']
-                        
+
                         # 活跃度和状态标识
                         if author in active_contributors:
                             if recent >= 10:
@@ -1261,12 +1316,12 @@ fi
                                 activity = "📊近期"
                         else:
                             activity = "💤静默"
-                        
+
                         print(f" {i}. {author}: {recent}|{total}|{score} {activity}")
                     else:
                         activity = "📊历史" if author in active_contributors else "💤静默"
                         print(f" {i}. {author}: ?|{stats}|{stats} {activity}")
-                    
+
                     # 统计全局贡献
                     if author not in all_contributors_global:
                         all_contributors_global[author] = {
@@ -1277,7 +1332,7 @@ fi
                             'groups_assigned': [],
                             'is_active': author in active_contributors
                         }
-                    
+
                     if isinstance(stats, dict):
                         all_contributors_global[author]['recent_commits'] += stats['recent_commits']
                         all_contributors_global[author]['total_commits'] += stats['total_commits']
@@ -1285,23 +1340,23 @@ fi
                     else:
                         all_contributors_global[author]['total_commits'] += stats
                         all_contributors_global[author]['score'] += stats
-                    
+
                     all_contributors_global[author]['groups_contributed'] += 1
-                    
+
                     # 检查是否被分配到这个组
                     if group.get('assignee') == author:
                         all_contributors_global[author]['groups_assigned'].append(group['name'])
             else:
                 print(" ⚠️ 贡献者数据未分析，请先运行自动分配任务")
-        
+
         if all_contributors_global:
             print(f"\n🏆 全局贡献者智能排名 (基于一年内活跃度):")
             print("-" * 100)
             print("排名 姓名 近期 历史 得分 活跃状态 参与组 分配组 近期活跃")
             print("-" * 100)
-            
+
             sorted_global = sorted(all_contributors_global.items(), key=lambda x: x[1]['score'], reverse=True)
-            
+
             for i, (author, stats) in enumerate(sorted_global[:20], 1):
                 recent = stats['recent_commits']
                 total = stats['total_commits']
@@ -1309,7 +1364,7 @@ fi
                 contributed = stats['groups_contributed']
                 assigned = len(stats['groups_assigned'])
                 is_active = stats['is_active']
-                
+
                 # 活跃度判断 (重点关注近期)
                 if not is_active:
                     activity = "💤静默"
@@ -1321,12 +1376,12 @@ fi
                     activity = "📊低"
                 else:
                     activity = "📊近期"
-                
+
                 assigned_display = f"{assigned}组" if assigned > 0 else "无"
                 active_status = "✅" if is_active else "❌"
-                
+
                 print(f"{i:2d} {author:<15} {recent:4d} {total:4d} {score:5d} {activity:<4} {contributed:4d} {assigned_display:<6} {active_status}")
-            
+
             print(f"\n📊 活跃度说明 (基于一年内提交 + 近3个月活跃度):")
             print("🔥高: 15+次 📈中: 5-14次 📊低: 1-4次 📊近期: 近期有活动 💤静默: 近3个月无提交")
             print("✅: 近3个月活跃 ❌: 近3个月静默")
@@ -1334,21 +1389,213 @@ fi
         else:
             print("\n⚠️ 暂无贡献者数据，请先运行自动分配任务以分析贡献度")
 
-    def finalize_merge(self):
+    def mark_group_completed(self, group_name):
+        """标记指定组为已完成"""
+        plan_file = self.work_dir / "merge_plan.json"
+        if not plan_file.exists():
+            print("❌ 合并计划文件不存在，请先运行创建合并计划")
+            return False
+
+        with open(plan_file, 'r', encoding='utf-8') as f:
+            plan = json.load(f)
+
+        # 找到对应组
+        group_found = False
+        for group in plan["groups"]:
+            if group["name"] == group_name:
+                group_found = True
+                old_status = group.get("status", "pending")
+                group["status"] = "completed"
+                group["completed_at"] = datetime.now().isoformat()
+
+                assignee = group.get("assignee", "未分配")
+                file_count = group.get("file_count", len(group["files"]))
+
+                print(f"✅ 组 '{group_name}' 已标记为完成")
+                print(f"   负责人: {assignee}")
+                print(f"   文件数: {file_count}")
+                print(f"   状态变更: {old_status} → completed")
+                break
+
+        if not group_found:
+            print(f"❌ 未找到组: {group_name}")
+            return False
+
+        # 保存更新
+        with open(plan_file, 'w', encoding='utf-8') as f:
+            json.dump(plan, f, indent=2, ensure_ascii=False)
+
+        # 显示整体进度
+        completed_count = sum(1 for g in plan["groups"] if g.get("status") == "completed")
+        total_count = len(plan["groups"])
+        print(f"📊 整体进度: {completed_count}/{total_count} 组已完成 ({completed_count/total_count*100:.1f}%)")
+
+        return True
+
+    def mark_assignee_completed(self, assignee_name):
+        """标记指定负责人的所有任务为已完成"""
+        plan_file = self.work_dir / "merge_plan.json"
+        if not plan_file.exists():
+            print("❌ 合并计划文件不存在，请先运行创建合并计划")
+            return False
+
+        with open(plan_file, 'r', encoding='utf-8') as f:
+            plan = json.load(f)
+
+        # 找到负责人的所有任务
+        assignee_groups = []
+        for group in plan["groups"]:
+            if group.get("assignee", "").lower() == assignee_name.lower():
+                assignee_groups.append(group)
+
+        if not assignee_groups:
+            print(f"❌ 负责人 '{assignee_name}' 没有分配的任务")
+            return False
+
+        # 标记所有任务为完成
+        completion_time = datetime.now().isoformat()
+        completed_count = 0
+
+        for group in assignee_groups:
+            if group.get("status") != "completed":
+                group["status"] = "completed"
+                group["completed_at"] = completion_time
+                completed_count += 1
+
+        # 保存更新
+        with open(plan_file, 'w', encoding='utf-8') as f:
+            json.dump(plan, f, indent=2, ensure_ascii=False)
+
+        total_files = sum(g.get("file_count", len(g["files"])) for g in assignee_groups)
+
+        print(f"✅ 负责人 '{assignee_name}' 的所有任务已标记完成")
+        print(f"   完成组数: {completed_count}/{len(assignee_groups)}")
+        print(f"   涉及文件: {total_files} 个")
+
+        # 显示整体进度
+        all_completed_count = sum(1 for g in plan["groups"] if g.get("status") == "completed")
+        total_count = len(plan["groups"])
+        print(f"📊 整体进度: {all_completed_count}/{total_count} 组已完成 ({all_completed_count/total_count*100:.1f}%)")
+
+        return True
+
+    def auto_check_remote_status(self):
+        """自动检查远程分支状态，推断哪些组可能已完成"""
+        plan_file = self.work_dir / "merge_plan.json"
+        if not plan_file.exists():
+            print("❌ 合并计划文件不存在，请先运行创建合并计划")
+            return False
+
+        with open(plan_file, 'r', encoding='utf-8') as f:
+            plan = json.load(f)
+
+        print("🔍 正在检查远程分支状态...")
+
+        # 更新远程分支信息
+        self.run_git_command("git fetch --all")
+
+        # 获取所有远程分支
+        remote_branches_output = self.run_git_command("git branch -r")
+        if not remote_branches_output:
+            print("⚠️ 无法获取远程分支信息")
+            return False
+
+        remote_branches = set()
+        for line in remote_branches_output.split('\n'):
+            branch = line.strip()
+            if branch and not branch.startswith('origin/HEAD'):
+                remote_branches.add(branch.replace('origin/', ''))
+
+        print(f"📡 发现 {len(remote_branches)} 个远程分支")
+
+        # 检查每个组对应的远程分支
+        potentially_completed = []
+        confirmed_completed = []
+
+        for group in plan["groups"]:
+            if group.get("status") == "completed":
+                continue  # 已经标记完成的跳过
+
+            assignee = group.get("assignee")
+            if not assignee:
+                continue  # 未分配的跳过
+
+            group_name = group["name"]
+
+            # 生成可能的分支名
+            possible_branch_names = [
+                f"merge-{group_name.replace('/', '-')}-{assignee.replace(' ', '-')}",
+                f"merge-batch-{assignee.replace(' ', '-')}"
+            ]
+
+            # 检查是否有对应的远程分支
+            for branch_name in possible_branch_names:
+                if any(branch_name in rb for rb in remote_branches):
+                    potentially_completed.append({
+                        "group": group,
+                        "branch": branch_name,
+                        "assignee": assignee
+                    })
+                    break
+
+        if potentially_completed:
+            print(f"\n🎯 发现 {len(potentially_completed)} 个可能已完成的组:")
+            print("-" * 80)
+
+            for item in potentially_completed:
+                group = item["group"]
+                branch = item["branch"]
+                assignee = item["assignee"]
+                file_count = group.get("file_count", len(group["files"]))
+
+                print(f"组: {group['name']:<25} 负责人: {assignee:<15} 分支: {branch}")
+                print(f"   文件数: {file_count}")
+
+                # 询问是否标记为完成
+                confirm = input(f"   是否标记为完成? (y/N): ").strip().lower()
+                if confirm == 'y':
+                    group["status"] = "completed"
+                    group["completed_at"] = datetime.now().isoformat()
+                    group["auto_detected"] = True
+                    confirmed_completed.append(group['name'])
+                    print(f"   ✅ 已标记完成")
+                else:
+                    print(f"   ⏭️ 跳过")
+                print()
+
+        # 保存更新
+        if confirmed_completed:
+            with open(plan_file, 'w', encoding='utf-8') as f:
+                json.dump(plan, f, indent=2, ensure_ascii=False)
+
+            print(f"📊 本次自动检查结果:")
+            print(f"   自动标记完成: {len(confirmed_completed)} 个组")
+            for group_name in confirmed_completed:
+                print(f"   - {group_name}")
+
+        # 显示整体进度
+        all_completed_count = sum(1 for g in plan["groups"] if g.get("status") == "completed")
+        total_count = len(plan["groups"])
+        print(f"\n📈 整体进度: {all_completed_count}/{total_count} 组已完成 ({all_completed_count/total_count*100:.1f}%)")
+
+        if potentially_completed and not confirmed_completed:
+            print("\n💡 提示: 如果这些分支确实对应已完成的合并，建议手动标记完成")
+
+        return True
         """完成最终合并"""
         print("🎯 开始最终合并...")
-        
+
         plan_file = self.work_dir / "merge_plan.json"
         if not plan_file.exists():
             print("❌ 合并计划文件不存在")
             return False
-        
+
         with open(plan_file, 'r', encoding='utf-8') as f:
             plan = json.load(f)
-        
+
         # 切换到集成分支
         self.run_git_command(f"git checkout {self.integration_branch}")
-        
+
         # 检查哪些分支已完成
         completed_branches = []
         for group in plan["groups"]:
@@ -1357,20 +1604,20 @@ fi
                 # 检查分支是否存在
                 if self.run_git_command(f"git show-ref --verify --quiet refs/heads/{branch_name}") is not None:
                     completed_branches.append((branch_name, group))
-        
+
         if not completed_branches:
             print("⚠️ 没有找到已完成的合并分支")
             return False
-        
+
         print(f"🔍 发现 {len(completed_branches)} 个已完成的分支:")
         total_files = 0
         for branch_name, group in completed_branches:
             file_count = group.get('file_count', len(group['files']))
             total_files += file_count
             print(f" - {branch_name} ({file_count} 文件)")
-        
+
         print(f"📊 总计将合并 {total_files} 个文件")
-        
+
         # 合并所有完成的分支
         for branch_name, group in completed_branches:
             print(f"🔄 正在合并分支: {branch_name}")
@@ -1380,7 +1627,7 @@ fi
             else:
                 print(f" ❌ 合并 {branch_name} 时出现问题")
                 return False
-        
+
         print("🎉 最终合并完成!")
         print(f"📋 集成分支 {self.integration_branch} 已包含所有更改")
         print(f"🚀 建议操作:")
@@ -1394,19 +1641,19 @@ def main():
         print("使用方法: python git_merge_tool.py <source_branch> <target_branch> [max_files_per_group]")
         print("示例: python git_merge_tool.py feature/big-feature main 5")
         sys.exit(1)
-    
+
     source_branch = sys.argv[1]
     target_branch = sys.argv[2]
     max_files_per_group = int(sys.argv[3]) if len(sys.argv) > 3 else 5
-    
+
     tool = GitMergeTool(source_branch, target_branch, max_files_per_group=max_files_per_group)
-    
+
     print("🚀 Git大分叉智能分步合并工具 (增强版)")
     print(f"源分支: {source_branch}")
     print(f"目标分支: {target_branch}")
     print(f"每组最大文件数: {max_files_per_group}")
     print()
-    
+
     while True:
         print("\n📋 可用操作:")
         print("1. 分析分支分叉")
@@ -1418,11 +1665,12 @@ def main():
         print("7. 搜索负责人任务")
         print("8. 合并指定负责人的所有任务")
         print("9. 检查状态")
-        print("10. 完成最终合并")
+        print("10. 完成状态管理 (标记完成/检查远程状态)")
+        print("11. 完成最终合并")
         print("0. 退出")
-        
-        choice = input("\n请选择操作 (0-10): ").strip()
-        
+
+        choice = input("\n请选择操作 (0-11): ").strip()
+
         if choice == '0':
             break
         elif choice == '1':
@@ -1433,13 +1681,13 @@ def main():
             print("🤖 智能自动分配模式 (活跃度过滤+备选方案)")
             exclude_input = input("请输入要排除的作者列表 (用逗号分隔，回车跳过): ").strip()
             exclude_authors = [name.strip() for name in exclude_input.split(',')] if exclude_input else []
-            
+
             max_tasks_input = input("每人最大任务数 (默认3): ").strip()
             max_tasks = int(max_tasks_input) if max_tasks_input.isdigit() else 3
-            
+
             fallback_input = input("启用备选分配方案? (Y/n): ").strip().lower()
             include_fallback = fallback_input != 'n'
-            
+
             tool.auto_assign_tasks(exclude_authors, max_tasks, include_fallback)
         elif choice == '4':
             assignments = {}
@@ -1466,6 +1714,24 @@ def main():
         elif choice == '9':
             tool.check_status()
         elif choice == '10':
+            print("📋 完成状态管理:")
+            print("a. 标记组完成")
+            print("b. 标记负责人所有任务完成")
+            print("c. 自动检查远程分支状态")
+            print("d. 返回主菜单")
+
+            sub_choice = input("请选择操作 (a-d): ").strip().lower()
+            if sub_choice == 'a':
+                group_name = input("请输入已完成的组名: ").strip()
+                tool.mark_group_completed(group_name)
+            elif sub_choice == 'b':
+                assignee_name = input("请输入负责人姓名: ").strip()
+                tool.mark_assignee_completed(assignee_name)
+            elif sub_choice == 'c':
+                tool.auto_check_remote_status()
+            elif sub_choice == 'd':
+                continue
+        elif choice == '11':
             tool.finalize_merge()
 
 if __name__ == "__main__":
