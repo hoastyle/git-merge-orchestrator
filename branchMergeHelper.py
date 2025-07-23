@@ -733,7 +733,7 @@ class GitMergeTool:
 
     def create_merge_branch(self, group_name, assignee):
         """为指定任务创建合并分支"""
-        branch_name = f"merge-{group_name.replace('/', '-')}-{assignee.replace(' ', '-')}"
+        branch_name = f"dev/merge-{group_name.replace('/', '-')}-{assignee.replace(' ', '-')}"
 
         # 创建工作分支
         self.run_git_command(f"git checkout {self.integration_branch}")
@@ -951,7 +951,7 @@ fi
         completed_branches = []
         for group in plan["groups"]:
             if group["status"] == "completed" and group.get("assignee"):
-                branch_name = f"merge-{group['name'].replace('/', '-')}-{group['assignee'].replace(' ', '-')}"
+                branch_name = f"dev/merge-{group['name'].replace('/', '-')}-{group['assignee'].replace(' ', '-')}"
                 # 检查分支是否存在
                 if self.run_git_command(f"git show-ref --verify --quiet refs/heads/{branch_name}") is not None:
                     completed_branches.append((branch_name, group))
@@ -1027,7 +1027,7 @@ fi
         print(f"  - 新增文件: {len(missing_files)} 个")
 
         # 创建统一的合并分支
-        batch_branch_name = f"merge-batch-{assignee_name.replace(' ', '-')}-{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        batch_branch_name = f"dev/merge-batch-{assignee_name.replace(' ', '-')}-{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
         print(f"\n🌿 创建批量合并分支: {batch_branch_name}")
         self.run_git_command(f"git checkout {self.integration_branch}")
@@ -1524,8 +1524,8 @@ fi
 
             # 生成可能的分支名
             possible_branch_names = [
-                f"merge-{group_name.replace('/', '-')}-{assignee.replace(' ', '-')}",
-                f"merge-batch-{assignee.replace(' ', '-')}"
+                f"dev/merge-{group_name.replace('/', '-')}-{assignee.replace(' ', '-')}",
+                f"dev/merge-batch-{assignee.replace(' ', '-')}"
             ]
 
             # 检查是否有对应的远程分支
@@ -1600,7 +1600,7 @@ fi
         completed_branches = []
         for group in plan["groups"]:
             if group["status"] == "completed" and group.get("assignee"):
-                branch_name = f"merge-{group['name'].replace('/', '-')}-{group['assignee'].replace(' ', '-')}"
+                branch_name = f"dev/merge-{group['name'].replace('/', '-')}-{group['assignee'].replace(' ', '-')}"
                 # 检查分支是否存在
                 if self.run_git_command(f"git show-ref --verify --quiet refs/heads/{branch_name}") is not None:
                     completed_branches.append((branch_name, group))
