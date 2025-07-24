@@ -35,12 +35,15 @@ class MergeExecutor:
 
         for file in existing_files:
             # 检查源分支相对于merge-base是否有修改
+            # 注意：git diff --quiet 返回非零表示有差异，这是正常的
             source_cmd = f'git diff --quiet {merge_base} {source_branch} -- "{file}"'
-            source_modified = self.git_ops.run_command(source_cmd) is None
+            source_result = self.git_ops.run_command_silent(source_cmd)
+            source_modified = source_result is None  # None表示有差异（非零退出码）
 
             # 检查目标分支相对于merge-base是否有修改
             target_cmd = f'git diff --quiet {merge_base} {target_branch} -- "{file}"'
-            target_modified = self.git_ops.run_command(target_cmd) is None
+            target_result = self.git_ops.run_command_silent(target_cmd)
+            target_modified = target_result is None  # None表示有差异（非零退出码）
 
             if source_modified and target_modified:
                 modified_in_both.append(file)

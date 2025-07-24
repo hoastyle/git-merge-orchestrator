@@ -254,20 +254,6 @@ class GitOperations:
 
         return branch_name
 
-    def check_file_existence(self, files, branch):
-        """检查文件在指定分支中是否存在"""
-        existing_files = []
-        missing_files = []
-
-        for file in files:
-            result = self.run_command(f"git cat-file -e {branch}:{file} 2>/dev/null")
-            if result is not None:
-                existing_files.append(file)
-            else:
-                missing_files.append(file)
-
-        return existing_files, missing_files
-
     def get_remote_branches(self):
         """获取所有远程分支"""
         self.run_command("git fetch --all")
@@ -315,6 +301,24 @@ class GitOperations:
         except subprocess.CalledProcessError:
             # 静默处理错误，不打印信息
             return None
+
+    def check_file_existence(self, files, branch):
+        """检查文件在指定分支中是否存在（静默检查）"""
+        existing_files = []
+        missing_files = []
+
+        print(f"🔍 正在检查 {len(files)} 个文件在分支 {branch} 中的存在性...")
+
+        for file in files:
+            # 使用静默命令检查，避免打印错误信息
+            result = self.run_command_silent(f"git cat-file -e {branch}:{file}")
+            if result is not None:
+                existing_files.append(file)
+            else:
+                missing_files.append(file)
+
+        print(f"📊 检查完成: {len(existing_files)} 个已存在, {len(missing_files)} 个新增")
+        return existing_files, missing_files
 
     def branch_exists(self, branch_name):
         """检查分支是否存在（静默检查）"""
