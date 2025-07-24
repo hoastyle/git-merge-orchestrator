@@ -495,7 +495,8 @@ class GitMergeTool:
                 "conflicts": [],
                 "notes": "",
                 "contributors": {},
-                "fallback_reason": ""
+                "fallback_reason": "",
+                "assignment_reason": ""  # 新增：分配原因
             })
 
         # 保存计划
@@ -560,6 +561,7 @@ class GitMergeTool:
             main_contributor, all_contributors = self.get_group_main_contributor(group['files'])
 
             assigned = False
+            assignment_reason = ""
 
             if main_contributor and main_contributor not in all_excluded:
                 # 检查负载均衡
@@ -568,6 +570,7 @@ class GitMergeTool:
                     group["assignee"] = main_contributor
                     assignment_count[main_contributor] = current_count + 1
                     stats = all_contributors[main_contributor]
+                    assignment_reason = f"基于文件贡献度直接分配 (一年内:{stats['recent_commits']}, 历史:{stats['total_commits']}, 得分:{stats['score']})"
                     print(f" ✅ 分配给: {main_contributor}")
                     print(f" 一年内提交: {stats['recent_commits']}, 历史提交: {stats['total_commits']}, 综合得分: {stats['score']}")
                     assigned = True
@@ -578,6 +581,7 @@ class GitMergeTool:
                         if author not in all_excluded and assignment_count.get(author, 0) < max_tasks_per_person:
                             group["assignee"] = author
                             assignment_count[author] = assignment_count.get(author, 0) + 1
+                            assignment_reason = f"负载均衡分配 (原推荐{main_contributor}已满负荷, 一年内:{stats['recent_commits']}, 历史:{stats['total_commits']}, 得分:{stats['score']})"
                             print(f" ✅ 分配给: {author}")
                             print(f" 一年内提交: {stats['recent_commits']}, 历史提交: {stats['total_commits']}, 综合得分: {stats['score']}")
                             print(f" (原推荐 {main_contributor} 已满负荷)")
@@ -595,6 +599,7 @@ class GitMergeTool:
                         group["assignee"] = fallback_assignee
                         assignment_count[fallback_assignee] = current_count + 1
                         group["fallback_reason"] = f"通过{fallback_source}目录分析分配"
+                        assignment_reason = f"备选目录分配 (来源:{fallback_source}, 一年内:{fallback_stats['recent_commits']}, 历史:{fallback_stats['total_commits']}, 得分:{fallback_stats['score']})"
                         print(f" ✅ 备选分配给: {fallback_assignee} (来源: {fallback_source})")
                         print(f" 目录贡献 - 一年内: {fallback_stats['recent_commits']}, 历史: {fallback_stats['total_commits']}, 得分: {fallback_stats['score']}")
                         assigned = True
@@ -604,21 +609,26 @@ class GitMergeTool:
                 if main_contributor:
                     if main_contributor in all_excluded:
                         if main_contributor in inactive_contributors:
+                            assignment_reason = f"主要贡献者{main_contributor}近3个月无活跃提交，已自动排除"
                             print(f" ⚠️ 主要贡献者 {main_contributor} 近3个月无活跃提交，已自动排除")
                             group["notes"] = f"建议: {main_contributor} (近期活跃度不足，已自动排除)"
                         else:
+                            assignment_reason = f"主要贡献者{main_contributor}在手动排除列表中"
                             print(f" ⚠️ 主要贡献者 {main_contributor} 在手动排除列表中")
                             main_stats = all_contributors[main_contributor]
                             group["notes"] = f"建议: {main_contributor} (近期:{main_stats['recent_commits']},历史:{main_stats['total_commits']},得分:{main_stats['score']}) 已手动排除"
                     else:
+                        assignment_reason = f"主要贡献者{main_contributor}已达最大任务数{max_tasks_per_person}"
                         main_stats = all_contributors[main_contributor]
                         group["notes"] = f"建议: {main_contributor} (近期:{main_stats['recent_commits']},历史:{main_stats['total_commits']},得分:{main_stats['score']}) 但已达最大任务数"
                         print(f" ⚠️ 主要贡献者 {main_contributor} 已达最大任务数")
                 else:
+                    assignment_reason = "无法确定主要贡献者"
                     print(f" ⚠️ 无法确定主要贡献者，请手动分配")
                     group["notes"] = "无法确定主要贡献者"
 
-            # 保存贡献者信息
+            # 保存分配原因和贡献者信息
+            group["assignment_reason"] = assignment_reason
             group["contributors"] = all_contributors
 
         # 保存更新后的计划
@@ -657,6 +667,7 @@ class GitMergeTool:
             for group in plan["groups"]:
                 if group["name"] == group_name:
                     group["assignee"] = assignee
+                    group["assignment_reason"] = "手动分配"
                     break
 
         with open(plan_file, 'w', encoding='utf-8') as f:
@@ -664,6 +675,212 @@ class GitMergeTool:
 
         print("✅ 任务分配完成")
         return plan
+
+    def view_group_details(self, group_name=None):
+        """查看分组详细信息 - 显示具体文件和分配原因"""
+        plan_file = self.work_dir / "merge_plan.json"
+        if not plan_file.exists():
+            print("❌ 合并计划文件不存在，请先运行创建合并计划")
+            return []
+
+        with open(plan_file, 'r', encoding='utf-8') as f:
+            plan = json.load(f)
+
+        if group_name:
+            # 查看指定组的详细信息
+            target_group = None
+            for group in plan["groups"]:
+                if group["name"] == group_name:
+                    target_group = group
+                    break
+
+            if not target_group:
+                print(f"❌ 未找到组: {group_name}")
+                return []
+
+            self._display_group_detail(target_group)
+            return [target_group]
+        else:
+            # 交互式选择查看
+            print("📋 可用分组列表:")
+            print("-" * 120)
+            print(f"{'序号':<4} {'组名':<25} {'类型':<15} {'文件数':<8} {'负责人':<15} {'状态':<8}")
+            print("-" * 120)
+
+            for i, group in enumerate(plan["groups"], 1):
+                assignee = group.get("assignee", "未分配")
+                status = "✅" if group.get("status") == "completed" else "🔄" if assignee != "未分配" else "⏳"
+                group_type = group.get("group_type", "unknown")
+                file_count = group.get("file_count", len(group["files"]))
+
+                print(f"{i:<4} {group['name']:<25} {group_type:<15} {file_count:<8} {assignee:<15} {status:<8}")
+
+            print("-" * 120)
+
+            try:
+                choice = input("请输入要查看的组序号 (回车返回): ").strip()
+                if not choice:
+                    return []
+
+                index = int(choice) - 1
+                if 0 <= index < len(plan["groups"]):
+                    selected_group = plan["groups"][index]
+                    self._display_group_detail(selected_group)
+                    return [selected_group]
+                else:
+                    print("❌ 无效的序号")
+                    return []
+            except ValueError:
+                print("❌ 请输入有效的数字")
+                return []
+
+    def _display_group_detail(self, group):
+        """显示单个组的详细信息"""
+        print("\n" + "="*100)
+        print(f"📁 组详细信息: {group['name']}")
+        print("="*100)
+
+        # 基本信息
+        print(f"📊 基本信息:")
+        print(f"   组名: {group['name']}")
+        print(f"   类型: {group.get('group_type', 'unknown')} ({self._get_group_type_description(group.get('group_type', 'unknown'))})")
+        print(f"   文件数: {group.get('file_count', len(group['files']))} 个")
+        print(f"   负责人: {group.get('assignee', '未分配')}")
+        print(f"   状态: {'✅ 已完成' if group.get('status') == 'completed' else '🔄 进行中' if group.get('assignee') else '⏳ 待分配'}")
+
+        # 分配原因
+        assignment_reason = group.get('assignment_reason', '未指定')
+        if assignment_reason:
+            print(f"   分配原因: {assignment_reason}")
+
+        # 备选分配信息
+        fallback_reason = group.get('fallback_reason', '')
+        if fallback_reason:
+            print(f"   备选原因: {fallback_reason}")
+
+        # 文件列表
+        print(f"\n📄 包含文件列表:")
+        files = group.get('files', [])
+        for i, file_path in enumerate(files, 1):
+            print(f"   {i:2d}. {file_path}")
+
+        # 贡献者分析
+        contributors = group.get('contributors', {})
+        if contributors:
+            print(f"\n👥 贡献者分析 (基于一年内活跃度):")
+            print(f"{'排名':<4} {'贡献者':<20} {'一年内':<8} {'历史总计':<8} {'综合得分':<8} {'参与文件':<8}")
+            print("-" * 70)
+
+            sorted_contributors = sorted(contributors.items(), key=lambda x: x[1]['score'] if isinstance(x[1], dict) else x[1], reverse=True)
+            for i, (author, stats) in enumerate(sorted_contributors[:10], 1):
+                if isinstance(stats, dict):
+                    recent = stats.get('recent_commits', 0)
+                    total = stats.get('total_commits', 0)
+                    score = stats.get('score', 0)
+                    file_count = stats.get('file_count', 0)
+                    print(f"{i:<4} {author:<20} {recent:<8} {total:<8} {score:<8} {file_count:<8}")
+                else:
+                    print(f"{i:<4} {author:<20} {'N/A':<8} {stats:<8} {stats:<8} {'N/A':<8}")
+
+            if len(sorted_contributors) > 10:
+                print(f"   ... 还有 {len(sorted_contributors) - 10} 位贡献者")
+
+        # 备注信息
+        notes = group.get('notes', '')
+        if notes:
+            print(f"\n📝 备注: {notes}")
+
+        print("="*100)
+
+    def _get_group_type_description(self, group_type):
+        """获取分组类型的描述"""
+        descriptions = {
+            'simple_group': '简单分组 - 文件数量较少，直接分组',
+            'direct_files': '直接文件 - 目录下的直接文件',
+            'subdir_group': '子目录分组 - 按子目录划分',
+            'alpha_group': '字母分组 - 根目录文件按首字母分组',
+            'batch_group': '批量分组 - 大量文件分批处理',
+            'fallback_batch': '回退批量 - 分组失败后的简单批量处理'
+        }
+        return descriptions.get(group_type, '未知类型')
+
+    def show_assignment_reasons(self):
+        """显示所有组的分配原因分析"""
+        plan_file = self.work_dir / "merge_plan.json"
+        if not plan_file.exists():
+            print("❌ 合并计划文件不存在，请先运行创建合并计划")
+            return
+
+        with open(plan_file, 'r', encoding='utf-8') as f:
+            plan = json.load(f)
+
+        print("\n📊 任务分配原因分析报告")
+        print("="*120)
+
+        # 统计分配原因类型
+        reason_stats = defaultdict(list)
+        for group in plan["groups"]:
+            assignment_reason = group.get('assignment_reason', '未指定')
+            reason_type = self._categorize_assignment_reason(assignment_reason)
+            reason_stats[reason_type].append(group)
+
+        print("📈 分配原因统计:")
+        for reason_type, groups in reason_stats.items():
+            print(f"   {reason_type}: {len(groups)} 个组")
+
+        print("\n" + "-"*120)
+        print(f"{'组名':<25} {'负责人':<15} {'文件数':<8} {'分配类型':<15} {'详细原因':<50}")
+        print("-"*120)
+
+        for group in plan["groups"]:
+            assignee = group.get('assignee', '未分配')
+            file_count = group.get('file_count', len(group['files']))
+            assignment_reason = group.get('assignment_reason', '未指定')
+            reason_type = self._categorize_assignment_reason(assignment_reason)
+
+            # 截断过长的原因说明
+            short_reason = assignment_reason[:45] + "..." if len(assignment_reason) > 45 else assignment_reason
+
+            print(f"{group['name']:<25} {assignee:<15} {file_count:<8} {reason_type:<15} {short_reason:<50}")
+
+        print("-"*120)
+
+        # 分类详细展示
+        print(f"\n📋 分类详细分析:")
+        for reason_type, groups in reason_stats.items():
+            if not groups:
+                continue
+
+            print(f"\n🔍 {reason_type} ({len(groups)} 个组):")
+            for group in groups[:5]:  # 只显示前5个
+                assignee = group.get('assignee', '未分配')
+                assignment_reason = group.get('assignment_reason', '未指定')
+                print(f"   - {group['name']} → {assignee}")
+                print(f"     原因: {assignment_reason}")
+
+            if len(groups) > 5:
+                print(f"   ... 还有 {len(groups) - 5} 个组")
+
+    def _categorize_assignment_reason(self, reason):
+        """将分配原因分类"""
+        if not reason or reason == '未指定':
+            return '未指定'
+        elif '基于文件贡献度直接分配' in reason:
+            return '直接分配'
+        elif '负载均衡分配' in reason:
+            return '负载均衡'
+        elif '备选目录分配' in reason:
+            return '备选分配'
+        elif '手动分配' in reason:
+            return '手动分配'
+        elif '无法确定主要贡献者' in reason:
+            return '无贡献者'
+        elif '已自动排除' in reason:
+            return '自动排除'
+        elif '已达最大任务数' in reason:
+            return '任务满载'
+        else:
+            return '其他'
 
     def search_assignee_tasks(self, assignee_name):
         """根据负责人搜索其负责的所有模块"""
@@ -689,9 +906,9 @@ class GitMergeTool:
 
         print(f"👤 负责人: {assignee_name}")
         print(f"📊 总览: {len(assignee_groups)} 个组, {total_files} 个文件")
-        print("-" * 80)
-        print(f"{'组名':<25} {'文件数':<8} {'状态':<8} {'类型':<15} {'备注'}")
-        print("-" * 80)
+        print("-" * 120)
+        print(f"{'组名':<25} {'文件数':<8} {'状态':<8} {'类型':<15} {'分配原因':<30}")
+        print("-" * 120)
 
         completed = 0
         pending = 0
@@ -701,22 +918,19 @@ class GitMergeTool:
             status_icon = "✅" if status == "completed" else "🔄"
             file_count = group.get("file_count", len(group["files"]))
             group_type = group.get("group_type", "unknown")
-            notes = group.get("notes", "")
-            fallback_reason = group.get("fallback_reason", "")
+            assignment_reason = group.get("assignment_reason", "未指定")
 
             if status == "completed":
                 completed += 1
             else:
                 pending += 1
 
-            # 显示备注
-            display_notes = notes
-            if fallback_reason:
-                display_notes = f"[备选] {fallback_reason}"
+            # 截断长的分配原因
+            short_reason = assignment_reason[:25] + "..." if len(assignment_reason) > 25 else assignment_reason
 
-            print(f"{group['name']:<25} {file_count:<8} {status_icon:<8} {group_type:<15} {display_notes[:30]}")
+            print(f"{group['name']:<25} {file_count:<8} {status_icon:<8} {group_type:<15} {short_reason:<30}")
 
-        print("-" * 80)
+        print("-" * 120)
         print(f"📈 进度: {completed}/{len(assignee_groups)} 组已完成, {pending} 组待处理")
 
         # 显示详细文件列表
@@ -724,6 +938,8 @@ class GitMergeTool:
             print(f"\n📄 详细文件列表:")
             for i, group in enumerate(assignee_groups, 1):
                 print(f"\n{i}. 组: {group['name']} ({group.get('file_count', len(group['files']))} 文件)")
+                assignment_reason = group.get("assignment_reason", "未指定")
+                print(f"   分配原因: {assignment_reason}")
                 for file in group['files'][:5]:  # 最多显示5个文件
                     print(f"   - {file}")
                 if len(group['files']) > 5:
@@ -733,7 +949,7 @@ class GitMergeTool:
 
     def create_merge_branch(self, group_name, assignee):
         """为指定任务创建合并分支"""
-        branch_name = f"dev/merge-{group_name.replace('/', '-')}-{assignee.replace(' ', '-')}"
+        branch_name = f"feat/merge-{group_name.replace('/', '-')}-{assignee.replace(' ', '-')}"
 
         # 创建工作分支
         self.run_git_command(f"git checkout {self.integration_branch}")
@@ -951,7 +1167,7 @@ fi
         completed_branches = []
         for group in plan["groups"]:
             if group["status"] == "completed" and group.get("assignee"):
-                branch_name = f"dev/merge-{group['name'].replace('/', '-')}-{group['assignee'].replace(' ', '-')}"
+                branch_name = f"feat/merge-{group['name'].replace('/', '-')}-{group['assignee'].replace(' ', '-')}"
                 # 检查分支是否存在
                 if self.run_git_command(f"git show-ref --verify --quiet refs/heads/{branch_name}") is not None:
                     completed_branches.append((branch_name, group))
@@ -1027,7 +1243,7 @@ fi
         print(f"  - 新增文件: {len(missing_files)} 个")
 
         # 创建统一的合并分支
-        batch_branch_name = f"dev/merge-batch-{assignee_name.replace(' ', '-')}-{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        batch_branch_name = f"feat/merge-batch-{assignee_name.replace(' ', '-')}-{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
         print(f"\n🌿 创建批量合并分支: {batch_branch_name}")
         self.run_git_command(f"git checkout {self.integration_branch}")
@@ -1177,7 +1393,7 @@ fi
 
         print("📋 智能分组与任务分配状态:")
         print("-" * 120)
-        print(f"{'组名':<25} {'文件数':<6} {'负责人':<15} {'状态':<6} {'一年内贡献':<12} {'推荐理由':<30}")
+        print(f"{'组名':<25} {'文件数':<6} {'负责人':<15} {'状态':<6} {'分配类型':<10} {'推荐理由':<30}")
         print("-" * 120)
 
         for group in plan["groups"]:
@@ -1185,9 +1401,12 @@ fi
             assignee = group.get("assignee", "未分配")
             file_count = group.get("file_count", len(group["files"]))
 
+            # 获取分配类型
+            assignment_reason = group.get("assignment_reason", "未指定")
+            assignment_type = self._categorize_assignment_reason(assignment_reason)
+
             # 获取推荐信息
             recommended_info = "N/A"
-            recent_commits = "N/A"
 
             # 检查是否是备选分配
             is_fallback = bool(group.get("fallback_reason", ""))
@@ -1198,13 +1417,13 @@ fi
                 if assignee in group['contributors']:
                     contributor_stats = group['contributors'][assignee]
                     if isinstance(contributor_stats, dict):
-                        recent_commits = str(contributor_stats.get('recent_commits', 0))
+                        recent_commits = contributor_stats.get('recent_commits', 0)
                         total_commits = contributor_stats.get('total_commits', 0)
                         score = contributor_stats.get('score', 0)
                         if is_fallback:
-                            recommended_info = f"[备选]{group['fallback_reason'][:20]}"
+                            recommended_info = f"[备选]{group['fallback_reason'][:15]}"
                         else:
-                            recommended_info = f"得分:{score}(近期:{recent_commits},历史:{total_commits})"
+                            recommended_info = f"得分:{score}(近期:{recent_commits})"
                     else:
                         recommended_info = f"历史提交:{contributor_stats}"
                 elif 'contributors' in group and group['contributors']:
@@ -1214,14 +1433,13 @@ fi
                         contributor_name = best_contributor[0]
                         stats = best_contributor[1]
                         if isinstance(stats, dict):
-                            recommended_info = f"推荐:{contributor_name}(得分:{stats['score']})"
-                            recent_commits = str(stats.get('recent_commits', 0))
+                            recommended_info = f"推荐:{contributor_name}({stats['score']})"
                         else:
                             recommended_info = f"推荐:{contributor_name}({stats})"
                     except:
                         recommended_info = "分析中..."
 
-            print(f"{group['name']:<25} {file_count:<6} {assignee:<15} {status_icon:<6} {recent_commits:<12} {recommended_info:<30}")
+            print(f"{group['name']:<25} {file_count:<6} {assignee:<15} {status_icon:<6} {assignment_type:<10} {recommended_info:<30}")
 
             if assignee != "未分配":
                 assigned_count += 1
@@ -1524,8 +1742,8 @@ fi
 
             # 生成可能的分支名
             possible_branch_names = [
-                f"dev/merge-{group_name.replace('/', '-')}-{assignee.replace(' ', '-')}",
-                f"dev/merge-batch-{assignee.replace(' ', '-')}"
+                f"feat/merge-{group_name.replace('/', '-')}-{assignee.replace(' ', '-')}",
+                f"feat/merge-batch-{assignee.replace(' ', '-')}"
             ]
 
             # 检查是否有对应的远程分支
@@ -1582,59 +1800,6 @@ fi
             print("\n💡 提示: 如果这些分支确实对应已完成的合并，建议手动标记完成")
 
         return True
-        """完成最终合并"""
-        print("🎯 开始最终合并...")
-
-        plan_file = self.work_dir / "merge_plan.json"
-        if not plan_file.exists():
-            print("❌ 合并计划文件不存在")
-            return False
-
-        with open(plan_file, 'r', encoding='utf-8') as f:
-            plan = json.load(f)
-
-        # 切换到集成分支
-        self.run_git_command(f"git checkout {self.integration_branch}")
-
-        # 检查哪些分支已完成
-        completed_branches = []
-        for group in plan["groups"]:
-            if group["status"] == "completed" and group.get("assignee"):
-                branch_name = f"dev/merge-{group['name'].replace('/', '-')}-{group['assignee'].replace(' ', '-')}"
-                # 检查分支是否存在
-                if self.run_git_command(f"git show-ref --verify --quiet refs/heads/{branch_name}") is not None:
-                    completed_branches.append((branch_name, group))
-
-        if not completed_branches:
-            print("⚠️ 没有找到已完成的合并分支")
-            return False
-
-        print(f"🔍 发现 {len(completed_branches)} 个已完成的分支:")
-        total_files = 0
-        for branch_name, group in completed_branches:
-            file_count = group.get('file_count', len(group['files']))
-            total_files += file_count
-            print(f" - {branch_name} ({file_count} 文件)")
-
-        print(f"📊 总计将合并 {total_files} 个文件")
-
-        # 合并所有完成的分支
-        for branch_name, group in completed_branches:
-            print(f"🔄 正在合并分支: {branch_name}")
-            result = self.run_git_command(f"git merge --no-ff -m 'Merge branch {branch_name}: {group['name']}' {branch_name}")
-            if result is not None:
-                print(f" ✅ 成功合并 {branch_name}")
-            else:
-                print(f" ❌ 合并 {branch_name} 时出现问题")
-                return False
-
-        print("🎉 最终合并完成!")
-        print(f"📋 集成分支 {self.integration_branch} 已包含所有更改")
-        print(f"🚀 建议操作:")
-        print(f" 1. 验证合并结果: git log --oneline -10")
-        print(f" 2. 推送到远程: git push origin {self.integration_branch}")
-        print(f" 3. 创建PR/MR合并到 {self.target_branch}")
-        return True
 
 def main():
     if len(sys.argv) < 3:
@@ -1665,11 +1830,13 @@ def main():
         print("7. 搜索负责人任务")
         print("8. 合并指定负责人的所有任务")
         print("9. 检查状态")
-        print("10. 完成状态管理 (标记完成/检查远程状态)")
-        print("11. 完成最终合并")
+        print("10. 查看分组详细信息")  # 新增
+        print("11. 查看分配原因分析")  # 新增
+        print("12. 完成状态管理 (标记完成/检查远程状态)")
+        print("13. 完成最终合并")
         print("0. 退出")
 
-        choice = input("\n请选择操作 (0-11): ").strip()
+        choice = input("\n请选择操作 (0-13): ").strip()
 
         if choice == '0':
             break
@@ -1714,6 +1881,22 @@ def main():
         elif choice == '9':
             tool.check_status()
         elif choice == '10':
+            print("📋 查看分组详细信息:")
+            print("a. 查看指定组详情")
+            print("b. 交互式选择查看")
+            print("c. 返回主菜单")
+
+            sub_choice = input("请选择操作 (a-c): ").strip().lower()
+            if sub_choice == 'a':
+                group_name = input("请输入组名: ").strip()
+                tool.view_group_details(group_name)
+            elif sub_choice == 'b':
+                tool.view_group_details()
+            elif sub_choice == 'c':
+                continue
+        elif choice == '11':
+            tool.show_assignment_reasons()
+        elif choice == '12':
             print("📋 完成状态管理:")
             print("a. 标记组完成")
             print("b. 标记负责人所有任务完成")
@@ -1731,7 +1914,7 @@ def main():
                 tool.auto_check_remote_status()
             elif sub_choice == 'd':
                 continue
-        elif choice == '11':
+        elif choice == '13':
             tool.finalize_merge()
 
 if __name__ == "__main__":
