@@ -26,10 +26,32 @@ class DisplayHelper:
         """格式化表格单元格，确保对齐"""
         text_str = str(text)
         display_width = DisplayHelper.get_display_width(text_str)
+
+        # 如果文本太长，智能截断
+        if display_width > width:
+            # 计算可以显示的字符数
+            truncated_text = ""
+            current_width = 0
+
+            for char in text_str:
+                char_width = 2 if ord(char) > 127 else 1
+                if current_width + char_width + 3 > width:  # 保留3个字符给"..."
+                    break
+                truncated_text += char
+                current_width += char_width
+
+            # 添加省略号
+            if width > 3:
+                text_str = truncated_text + "..."
+                display_width = DisplayHelper.get_display_width(text_str)
+            else:
+                text_str = text_str[:width]
+                display_width = width
+
         padding = width - display_width
 
         if padding <= 0:
-            return text_str[:width]
+            return text_str
 
         if align == 'left':
             return text_str + ' ' * padding
@@ -74,13 +96,65 @@ class DisplayHelper:
         print(' '.join(row))
 
     @staticmethod
-    def print_table(table_name, data_rows, extra_info=None):
+    def auto_adjust_table_width(table_name, data_rows):
+        """根据数据内容自动调整表格列宽"""
+        if table_name not in TABLE_CONFIGS:
+            return TABLE_CONFIGS.get(table_name, {})
+
+        config = TABLE_CONFIGS[table_name].copy()
+        headers = config['headers']
+        widths = config['widths'].copy()
+        aligns = config['aligns']
+
+        # 计算每列的最大显示宽度
+        max_widths = []
+        for i, header in enumerate(headers):
+            # 从标题开始
+            max_width = DisplayHelper.get_display_width(header)
+
+            # 检查数据行中的最大宽度
+            for row in data_rows:
+                if i < len(row):
+                    cell_width = DisplayHelper.get_display_width(str(row[i]))
+                    max_width = max(max_width, cell_width)
+
+            max_widths.append(max_width)
+
+        # 针对特定列进行智能调整（主要是组名列）
+        if table_name == 'status_overview' and len(max_widths) > 0:
+            # 组名列（第0列）最少45个字符，最多65个字符
+            max_widths[0] = max(45, min(65, max_widths[0] + 2))
+        elif table_name == 'group_list' and len(max_widths) > 1:
+            # 组名列（第1列）
+            max_widths[1] = max(45, min(65, max_widths[1] + 2))
+        elif table_name in ['assignment_reasons', 'assignee_tasks'] and len(max_widths) > 0:
+            # 组名列（第0列）
+            max_widths[0] = max(45, min(65, max_widths[0] + 2))
+
+        # 使用调整后的宽度，但保持原来的最小宽度
+        for i in range(len(widths)):
+            if i < len(max_widths):
+                widths[i] = max(widths[i], max_widths[i])
+
+        return {
+            'headers': headers,
+            'widths': widths,
+            'aligns': aligns
+        }
+
+    @staticmethod
+    def print_table(table_name, data_rows, extra_info=None, auto_adjust=True):
         """打印预配置的表格"""
         if table_name not in TABLE_CONFIGS:
             print(f"❌ 未知的表格类型: {table_name}")
             return
 
-        config = TABLE_CONFIGS[table_name]
+        # 根据数据自动调整宽度
+        if auto_adjust:
+            config = DisplayHelper.auto_adjust_table_width(table_name, data_rows)
+        else:
+            config = TABLE_CONFIGS[table_name]
+
         headers = config['headers']
         widths = config['widths']
         aligns = config['aligns']
@@ -255,7 +329,7 @@ class DisplayHelper:
         print("6. 合并指定组")
         print("7. 搜索负责人任务")
         print("8. 合并指定负责人的所有任务")
-        print("9. 检查状态")
+        print("9. 检查状态 (可选择显示模式)")
         print("10. 查看分组详细信息")
         print("11. 查看分配原因分析")
         print("12. 完成状态管理 (标记完成/检查远程状态)")

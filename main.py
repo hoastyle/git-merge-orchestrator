@@ -200,7 +200,20 @@ def run_interactive_menu(orchestrator):
                     DisplayHelper.print_warning("负责人姓名不能为空")
 
             elif choice == '9':
-                orchestrator.check_status()
+                print("📊 检查状态选项:")
+                print("a. 标准表格显示")
+                print("b. 完整组名显示")
+                print("c. 返回主菜单")
+
+                sub_choice = input("请选择显示模式 (a-c): ").strip().lower()
+                if sub_choice == 'a':
+                    orchestrator.check_status(show_full_names=False)
+                elif sub_choice == 'b':
+                    orchestrator.check_status(show_full_names=True)
+                elif sub_choice == 'c':
+                    continue
+                else:
+                    DisplayHelper.print_warning("无效选择")
 
             elif choice == '10':
                 handle_group_details_menu(orchestrator)

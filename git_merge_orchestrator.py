@@ -111,9 +111,45 @@ class GitMergeOrchestrator:
         DisplayHelper.print_success("任务分配完成")
         return updated_plan
 
-    def check_status(self):
+    def check_status(self, show_full_names=False):
         """检查合并状态"""
-        self.plan_manager.check_status()
+        if show_full_names:
+            self._show_full_group_names()
+        else:
+            self.plan_manager.check_status()
+
+    def _show_full_group_names(self):
+        """显示完整的组名列表"""
+        plan = self.file_helper.load_plan()
+        if not plan:
+            DisplayHelper.print_error("合并计划文件不存在，请先运行创建合并计划")
+            return
+
+        print("📋 完整组名列表:")
+        print("="*100)
+
+        for i, group in enumerate(plan.get("groups", []), 1):
+            group_name = group.get('name', 'N/A')
+            assignee = group.get('assignee', '未分配')
+            file_count = group.get('file_count', len(group.get('files', [])))
+            status = "✅" if group.get("status") == "completed" else "🔄" if assignee != "未分配" else "⏳"
+            group_type = group.get('group_type', 'unknown')
+
+            print(f"{i:3d}. {status} {group_name}")
+            print(f"     类型: {group_type} | 文件数: {file_count} | 负责人: {assignee}")
+
+            # 显示分配原因（简短版）
+            assignment_reason = group.get('assignment_reason', '未指定')
+            if len(assignment_reason) > 80:
+                assignment_reason = assignment_reason[:77] + "..."
+            print(f"     原因: {assignment_reason}")
+            print()
+
+        # 显示统计摘要
+        stats = self.file_helper.get_completion_stats(plan)
+        completion_info = DisplayHelper.format_completion_stats(stats)
+        print("="*100)
+        print(completion_info)
 
     def show_contributor_analysis(self):
         """显示贡献者分析报告"""

@@ -43,27 +43,27 @@ ASSIGNMENT_REASON_TYPES = {
 TABLE_CONFIGS = {
     'status_overview': {
         'headers': ["组名", "文件数", "负责人", "状态", "分配类型", "推荐理由"],
-        'widths': [30, 8, 20, 8, 12, 35],
+        'widths': [45, 8, 20, 8, 12, 35],
         'aligns': ['left', 'center', 'left', 'center', 'left', 'left']
     },
     'group_list': {
         'headers': ["序号", "组名", "类型", "文件数", "负责人", "状态"],
-        'widths': [6, 30, 18, 8, 20, 8],
+        'widths': [6, 45, 18, 8, 20, 8],
         'aligns': ['center', 'left', 'left', 'center', 'left', 'center']
     },
     'contributor_ranking': {
         'headers': ["排名", "姓名", "近期", "历史", "得分", "活跃状态", "参与组", "分配组", "近期活跃"],
-        'widths': [6, 20, 6, 6, 8, 10, 8, 8, 10],
+        'widths': [6, 25, 6, 6, 8, 10, 8, 8, 10],
         'aligns': ['center', 'left', 'center', 'center', 'center', 'center', 'center', 'center', 'center']
     },
     'assignment_reasons': {
         'headers': ["组名", "负责人", "文件数", "分配类型", "详细原因"],
-        'widths': [30, 20, 8, 18, 50],
+        'widths': [45, 20, 8, 18, 45],
         'aligns': ['left', 'left', 'center', 'left', 'left']
     },
     'assignee_tasks': {
         'headers': ["组名", "文件数", "状态", "类型", "分配原因"],
-        'widths': [30, 8, 8, 18, 40],
+        'widths': [45, 8, 8, 18, 40],
         'aligns': ['left', 'center', 'center', 'left', 'left']
     }
 }
