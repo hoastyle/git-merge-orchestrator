@@ -18,7 +18,7 @@ from ui.display_helper import DisplayHelper
 def parse_arguments():
     """解析命令行参数"""
     parser = argparse.ArgumentParser(
-        description='Git大分叉智能分步合并工具 - 多人协作版',
+        description="Git大分叉智能分步合并工具 - 多人协作版",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 使用示例:
@@ -34,16 +34,14 @@ def parse_arguments():
   • 批量操作支持 - 支持按负责人批量合并和状态管理
   • 进度跟踪 - 完整的任务状态跟踪和远程分支检测
   • 交互式合并 - 支持文件级策略选择，适用于大分叉场景
-        """
+        """,
     )
 
-    parser.add_argument('source_branch', help='源分支名称')
-    parser.add_argument('target_branch', help='目标分支名称')
-    parser.add_argument('--max-files', type=int, default=5,
-                       help='每组最大文件数 (默认: 5)')
-    parser.add_argument('--repo', default='.',
-                       help='Git仓库路径 (默认: 当前目录)')
-    parser.add_argument('--version', action='version', version='Git Merge Orchestrator 2.1')
+    parser.add_argument("source_branch", help="源分支名称")
+    parser.add_argument("target_branch", help="目标分支名称")
+    parser.add_argument("--max-files", type=int, default=5, help="每组最大文件数 (默认: 5)")
+    parser.add_argument("--repo", default=".", help="Git仓库路径 (默认: 当前目录)")
+    parser.add_argument("--version", action="version", version="Git Merge Orchestrator 2.1")
 
     return parser.parse_args()
 
@@ -51,7 +49,7 @@ def parse_arguments():
 def show_welcome_banner(orchestrator):
     """显示欢迎横幅"""
     print("🚀 Git大分叉智能分步合并工具 (重构增强版)")
-    print("="*80)
+    print("=" * 80)
     print(f"源分支: {orchestrator.source_branch}")
     print(f"目标分支: {orchestrator.target_branch}")
     print(f"每组最大文件数: {orchestrator.max_files_per_group}")
@@ -60,20 +58,20 @@ def show_welcome_banner(orchestrator):
     # 显示计划摘要（如果存在）
     try:
         summary = orchestrator.get_plan_summary()
-        if summary and summary.get('stats'):
-            stats = summary['stats']
+        if summary and summary.get("stats"):
+            stats = summary["stats"]
             print(f"\n📊 当前计划状态:")
             print(f"   总分组: {stats.get('total_groups', 0)} 个")
             print(f"   总文件: {stats.get('total_files', 0)} 个")
             print(f"   已分配: {stats.get('assigned_groups', 0)} 组 ({stats.get('assigned_files', 0)} 文件)")
             print(f"   已完成: {stats.get('completed_groups', 0)} 组 ({stats.get('completed_files', 0)} 文件)")
-            if summary.get('integration_branch'):
+            if summary.get("integration_branch"):
                 print(f"   集成分支: {summary['integration_branch']}")
     except Exception as e:
         # 如果获取摘要失败，不影响主程序运行
         pass
 
-    print("="*80)
+    print("=" * 80)
 
 
 def handle_auto_assign_menu(orchestrator):
@@ -81,13 +79,13 @@ def handle_auto_assign_menu(orchestrator):
     print("🤖 智能自动分配模式 (活跃度过滤+备选方案)")
 
     exclude_input = input("请输入要排除的作者列表 (用逗号分隔，回车跳过): ").strip()
-    exclude_authors = [name.strip() for name in exclude_input.split(',')] if exclude_input else []
+    exclude_authors = [name.strip() for name in exclude_input.split(",")] if exclude_input else []
 
     max_tasks_input = input("每人最大任务数 (默认3): ").strip()
     max_tasks = int(max_tasks_input) if max_tasks_input.isdigit() else 3
 
     fallback_input = input("启用备选分配方案? (Y/n): ").strip().lower()
-    include_fallback = fallback_input != 'n'
+    include_fallback = fallback_input != "n"
 
     orchestrator.auto_assign_tasks(exclude_authors, max_tasks, include_fallback)
 
@@ -100,8 +98,8 @@ def handle_manual_assign_menu(orchestrator):
         line = input().strip()
         if not line:
             break
-        if '=' in line:
-            group, assignee = line.split('=', 1)
+        if "=" in line:
+            group, assignee = line.split("=", 1)
             assignments[group.strip()] = assignee.strip()
 
     if assignments:
@@ -118,12 +116,12 @@ def handle_group_details_menu(orchestrator):
     print("c. 返回主菜单")
 
     sub_choice = input("请选择操作 (a-c): ").strip().lower()
-    if sub_choice == 'a':
+    if sub_choice == "a":
         group_name = input("请输入组名: ").strip()
         orchestrator.view_group_details(group_name)
-    elif sub_choice == 'b':
+    elif sub_choice == "b":
         orchestrator.view_group_details()
-    elif sub_choice == 'c':
+    elif sub_choice == "c":
         return
     else:
         DisplayHelper.print_warning("无效选择")
@@ -138,15 +136,15 @@ def handle_status_management_menu(orchestrator):
     print("d. 返回主菜单")
 
     sub_choice = input("请选择操作 (a-d): ").strip().lower()
-    if sub_choice == 'a':
+    if sub_choice == "a":
         group_name = input("请输入已完成的组名: ").strip()
         orchestrator.mark_group_completed(group_name)
-    elif sub_choice == 'b':
+    elif sub_choice == "b":
         assignee_name = input("请输入负责人姓名: ").strip()
         orchestrator.mark_assignee_completed(assignee_name)
-    elif sub_choice == 'c':
+    elif sub_choice == "c":
         orchestrator.auto_check_remote_status()
-    elif sub_choice == 'd':
+    elif sub_choice == "d":
         return
     else:
         DisplayHelper.print_warning("无效选择")
@@ -160,14 +158,14 @@ def handle_interactive_merge_menu(orchestrator):
     print("c. 返回主菜单")
 
     sub_choice = input("请选择操作 (a-c): ").strip().lower()
-    if sub_choice == 'a':
+    if sub_choice == "a":
         group_name = input("请输入要交互式合并的组名: ").strip()
         if group_name:
             orchestrator.interactive_merge_group(group_name)
         else:
             DisplayHelper.print_warning("组名不能为空")
 
-    elif sub_choice == 'b':
+    elif sub_choice == "b":
         assignee_name = input("请输入负责人姓名: ").strip()
         if assignee_name:
             print("🔄 交互式批量合并功能开发中...")
@@ -179,7 +177,7 @@ def handle_interactive_merge_menu(orchestrator):
         else:
             DisplayHelper.print_warning("负责人姓名不能为空")
 
-    elif sub_choice == 'c':
+    elif sub_choice == "c":
         return
     else:
         DisplayHelper.print_warning("无效选择")
@@ -190,7 +188,7 @@ def show_updated_menu():
     print("\n📋 可用操作:")
     print("1. 分析分支分叉")
     print("2. 创建智能合并计划")
-    print("3. 智能自动分配任务 (含活跃度过滤+备选方案)")
+    print("3. 🚀 涡轮增压自动分配任务 (优化版)")
     print("4. 手动分配任务")
     print("5. 查看贡献者智能分析")
     print("6. 合并指定组 (自动策略)")
@@ -201,7 +199,8 @@ def show_updated_menu():
     print("11. 查看分配原因分析")
     print("12. 完成状态管理 (标记完成/检查远程状态)")
     print("13. 完成最终合并")
-    print("14. 🎯 交互式智能合并 (策略选择) ✨")
+    print("14. 🎯 交互式智能合并 (策略选择)")
+    print("15. ⚡ 缓存管理 (清理/状态)")  # 新增
     print("0. 退出")
 
 
@@ -213,76 +212,79 @@ def run_interactive_menu(orchestrator):
         try:
             choice = input("\n请选择操作 (0-14): ").strip()
 
-            if choice == '0':
+            if choice == "0":
                 print("👋 感谢使用Git Merge Orchestrator！")
                 break
 
-            elif choice == '1':
+            elif choice == "1":
                 orchestrator.analyze_divergence()
 
-            elif choice == '2':
+            elif choice == "2":
                 orchestrator.create_merge_plan()
 
-            elif choice == '3':
+            elif choice == "3":
                 handle_auto_assign_menu(orchestrator)
 
-            elif choice == '4':
+            elif choice == "4":
                 handle_manual_assign_menu(orchestrator)
 
-            elif choice == '5':
+            elif choice == "5":
                 orchestrator.show_contributor_analysis()
 
-            elif choice == '6':
+            elif choice == "6":
                 group_name = input("请输入要合并的组名: ").strip()
                 if group_name:
                     orchestrator.merge_group(group_name)
                 else:
                     DisplayHelper.print_warning("组名不能为空")
 
-            elif choice == '7':
+            elif choice == "7":
                 assignee_name = input("请输入负责人姓名: ").strip()
                 if assignee_name:
                     orchestrator.search_assignee_tasks(assignee_name)
                 else:
                     DisplayHelper.print_warning("负责人姓名不能为空")
 
-            elif choice == '8':
+            elif choice == "8":
                 assignee_name = input("请输入要合并任务的负责人姓名: ").strip()
                 if assignee_name:
                     orchestrator.merge_assignee_tasks(assignee_name)
                 else:
                     DisplayHelper.print_warning("负责人姓名不能为空")
 
-            elif choice == '9':
+            elif choice == "9":
                 print("📊 检查状态选项:")
                 print("a. 标准表格显示")
                 print("b. 完整组名显示")
                 print("c. 返回主菜单")
 
                 sub_choice = input("请选择显示模式 (a-c): ").strip().lower()
-                if sub_choice == 'a':
+                if sub_choice == "a":
                     orchestrator.check_status(show_full_names=False)
-                elif sub_choice == 'b':
+                elif sub_choice == "b":
                     orchestrator.check_status(show_full_names=True)
-                elif sub_choice == 'c':
+                elif sub_choice == "c":
                     continue
                 else:
                     DisplayHelper.print_warning("无效选择")
 
-            elif choice == '10':
+            elif choice == "10":
                 handle_group_details_menu(orchestrator)
 
-            elif choice == '11':
+            elif choice == "11":
                 orchestrator.show_assignment_reasons()
 
-            elif choice == '12':
+            elif choice == "12":
                 handle_status_management_menu(orchestrator)
 
-            elif choice == '13':
+            elif choice == "13":
                 orchestrator.finalize_merge()
 
-            elif choice == '14':
+            elif choice == "14":
                 handle_interactive_merge_menu(orchestrator)
+
+            elif choice == "15":
+                handle_cache_management_menu(orchestrator)
 
             else:
                 DisplayHelper.print_warning("无效选择，请输入0-14之间的数字")
@@ -298,7 +300,7 @@ def run_interactive_menu(orchestrator):
 def validate_environment(orchestrator):
     """验证运行环境"""
     # 检查是否在Git仓库中
-    git_dir = orchestrator.repo_path / '.git'
+    git_dir = orchestrator.repo_path / ".git"
     if not git_dir.exists():
         DisplayHelper.print_error("当前目录不是Git仓库")
         return False
@@ -317,6 +319,44 @@ def validate_environment(orchestrator):
     return True
 
 
+def handle_cache_management_menu(orchestrator):
+    """处理缓存管理菜单"""
+    print("⚡ 缓存管理:")
+    print("a. 查看缓存状态")
+    print("b. 清理缓存")
+    print("c. 强制重建缓存")
+    print("d. 返回主菜单")
+
+    sub_choice = input("请选择操作 (a-d): ").strip().lower()
+    if sub_choice == "a":
+        stats = orchestrator.contributor_analyzer.get_performance_stats()
+        print("📊 缓存状态:")
+        print(f"   缓存文件数: {stats['cached_files']}")
+        print(f"   缓存目录数: {stats['cached_directories']}")
+        print(f"   缓存文件存在: {'✅' if stats['cache_file_exists'] else '❌'}")
+        print(f"   批量计算状态: {'✅' if stats['batch_computed'] else '❌'}")
+
+    elif sub_choice == "b":
+        cache_file = orchestrator.contributor_analyzer.cache_file
+        if cache_file.exists():
+            cache_file.unlink()
+            print("✅ 缓存已清理")
+        else:
+            print("ℹ️ 缓存文件不存在")
+
+    elif sub_choice == "c":
+        # 清理内存缓存，强制重新计算
+        orchestrator.contributor_analyzer._file_contributors_cache = {}
+        orchestrator.contributor_analyzer._directory_contributors_cache = {}
+        orchestrator.contributor_analyzer._batch_computed = False
+        print("✅ 缓存已重置，下次分析将重新计算")
+
+    elif sub_choice == "d":
+        return
+    else:
+        DisplayHelper.print_warning("无效选择")
+
+
 def main():
     """主函数"""
     try:
@@ -328,7 +368,7 @@ def main():
             source_branch=args.source_branch,
             target_branch=args.target_branch,
             repo_path=args.repo,
-            max_files_per_group=args.max_files
+            max_files_per_group=args.max_files,
         )
 
         # 验证环境

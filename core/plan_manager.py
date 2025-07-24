@@ -33,7 +33,9 @@ class PlanManager:
             print(f"\n📊 差异统计:\n{diff_stats}")
 
         # 创建集成分支
-        integration_branch = self.git_ops.create_integration_branch(source_branch, target_branch)
+        integration_branch = self.git_ops.create_integration_branch(
+            source_branch, target_branch
+        )
         if not integration_branch:
             return None
 
@@ -44,7 +46,7 @@ class PlanManager:
             "merge_base": merge_base,
             "diff_stats": diff_stats,
             "integration_branch": integration_branch,
-            "merge_preview": merge_result
+            "merge_preview": merge_result,
         }
 
     def create_merge_plan(self, source_branch, target_branch, max_files_per_group=5):
@@ -60,7 +62,9 @@ class PlanManager:
         print(f"🔍 发现 {len(changed_files)} 个变更文件，开始智能分组...")
 
         # 创建集成分支
-        integration_branch = self.git_ops.create_integration_branch(source_branch, target_branch)
+        integration_branch = self.git_ops.create_integration_branch(
+            source_branch, target_branch
+        )
         if not integration_branch:
             return None
 
@@ -74,14 +78,16 @@ class PlanManager:
             # 回退到简单分组
             file_groups = []
             for i in range(0, len(changed_files), max_files_per_group):
-                batch_files = changed_files[i:i+max_files_per_group]
+                batch_files = changed_files[i : i + max_files_per_group]
                 batch_name = f"batch-{i//max_files_per_group + 1:03d}"
-                file_groups.append({
-                    "name": batch_name,
-                    "files": batch_files,
-                    "file_count": len(batch_files),
-                    "type": "fallback_batch"
-                })
+                file_groups.append(
+                    {
+                        "name": batch_name,
+                        "files": batch_files,
+                        "file_count": len(batch_files),
+                        "type": "fallback_batch",
+                    }
+                )
 
         print(f"📊 分组完成: {len(file_groups)} 个组")
         for i, group in enumerate(file_groups[:10]):
@@ -98,7 +104,9 @@ class PlanManager:
         self.file_helper.save_plan(merge_plan)
 
         print(f"✅ 智能合并计划已保存至: {self.file_helper.plan_file_path}")
-        print(f"📁 共生成 {len(file_groups)} 个分组，平均每组 {len(changed_files)/len(file_groups):.1f} 个文件")
+        print(
+            f"📁 共生成 {len(file_groups)} 个分组，平均每组 {len(changed_files)/len(file_groups):.1f} 个文件"
+        )
 
         # 显示分组统计
         group_types = defaultdict(int)
@@ -143,13 +151,21 @@ class PlanManager:
         fallback_assigned = 0
 
         for group in plan.get("groups", []):
-            status_icon = "✅" if group.get("status") == "completed" else "🔄" if group.get("assignee") else "⏳"
+            status_icon = (
+                "✅"
+                if group.get("status") == "completed"
+                else "🔄"
+                if group.get("assignee")
+                else "⏳"
+            )
             assignee = group.get("assignee", "未分配")
             file_count = group.get("file_count", len(group.get("files", [])))
 
             # 获取分配类型
             assignment_reason = group.get("assignment_reason", "未指定")
-            assignment_type = DisplayHelper.categorize_assignment_reason(assignment_reason)
+            assignment_type = DisplayHelper.categorize_assignment_reason(
+                assignment_reason
+            )
 
             # 获取推荐信息
             recommended_info = "N/A"
@@ -157,47 +173,69 @@ class PlanManager:
             if is_fallback:
                 fallback_assigned += 1
 
-            if assignee != "未分配" and 'contributors' in group and group['contributors']:
-                if assignee in group['contributors']:
-                    contributor_stats = group['contributors'][assignee]
+            if assignee != "未分配" and "contributors" in group and group["contributors"]:
+                if assignee in group["contributors"]:
+                    contributor_stats = group["contributors"][assignee]
                     if isinstance(contributor_stats, dict):
-                        recent_commits = contributor_stats.get('recent_commits', 0)
-                        score = contributor_stats.get('score', 0)
+                        recent_commits = contributor_stats.get("recent_commits", 0)
+                        score = contributor_stats.get("score", 0)
                         if is_fallback:
-                            recommended_info = f"[备选]{group.get('fallback_reason', '')[:15]}"
+                            recommended_info = (
+                                f"[备选]{group.get('fallback_reason', '')[:15]}"
+                            )
                         else:
                             recommended_info = f"得分:{score}(近期:{recent_commits})"
                     else:
                         recommended_info = f"历史提交:{contributor_stats}"
-                elif group['contributors']:
+                elif group["contributors"]:
                     # 显示最推荐的贡献者
                     try:
-                        best_contributor = max(group['contributors'].items(),
-                                             key=lambda x: x[1]['score'] if isinstance(x[1], dict) else x[1])
+                        best_contributor = max(
+                            group["contributors"].items(),
+                            key=lambda x: x[1]["score"]
+                            if isinstance(x[1], dict)
+                            else x[1],
+                        )
                         contributor_name = best_contributor[0]
                         stats = best_contributor[1]
                         if isinstance(stats, dict):
-                            recommended_info = f"推荐:{contributor_name}({stats['score']})"
+                            recommended_info = (
+                                f"推荐:{contributor_name}({stats['score']})"
+                            )
                         else:
                             recommended_info = f"推荐:{contributor_name}({stats})"
                     except:
                         recommended_info = "分析中..."
 
-            table_data.append([
-                group.get('name', 'N/A'), str(file_count), assignee, status_icon, assignment_type, recommended_info
-            ])
+            table_data.append(
+                [
+                    group.get("name", "N/A"),
+                    str(file_count),
+                    assignee,
+                    status_icon,
+                    assignment_type,
+                    recommended_info,
+                ]
+            )
 
         if table_data:
-            DisplayHelper.print_table('status_overview', table_data)
+            DisplayHelper.print_table("status_overview", table_data)
 
         completion_info = DisplayHelper.format_completion_stats(stats)
         print(completion_info)
         print(f"🔄 备选分配: {fallback_assigned} 组通过目录分析分配")
 
-        if stats.get('assigned_groups', 0) < stats.get('total_groups', 0):
-            unassigned = [g.get('name', 'N/A') for g in plan.get('groups', []) if not g.get('assignee')]
+        if stats.get("assigned_groups", 0) < stats.get("total_groups", 0):
+            unassigned = [
+                g.get("name", "N/A")
+                for g in plan.get("groups", [])
+                if not g.get("assignee")
+            ]
             if unassigned:
-                print(f"\n⚠️ 未分配的组: {', '.join(unassigned[:5])}" + ("..." if len(unassigned) > 5 else ""))
+                print(
+                    f"\n⚠️ 未分配的组: {', '.join(unassigned[:5])}"
+                    + ("..." if len(unassigned) > 5 else "")
+                )
 
         # 显示负载分布
         workload_info = DisplayHelper.format_workload_distribution(workload)
@@ -212,7 +250,9 @@ class PlanManager:
             return False
 
         completion_time = datetime.now().isoformat()
-        success = self.file_helper.update_group_status(plan, group_name, "completed", completion_time)
+        success = self.file_helper.update_group_status(
+            plan, group_name, "completed", completion_time
+        )
 
         if success:
             group = self.file_helper.find_group_by_name(plan, group_name)
@@ -229,7 +269,9 @@ class PlanManager:
 
             # 显示整体进度
             stats = self.file_helper.get_completion_stats(plan)
-            print(f"📊 整体进度: {stats['completed_groups']}/{stats['total_groups']} 组已完成 ({stats['completed_groups']/stats['total_groups']*100:.1f}%)")
+            print(
+                f"📊 整体进度: {stats['completed_groups']}/{stats['total_groups']} 组已完成 ({stats['completed_groups']/stats['total_groups']*100:.1f}%)"
+            )
 
             return True
         else:
@@ -270,7 +312,9 @@ class PlanManager:
 
         # 显示整体进度
         stats = self.file_helper.get_completion_stats(plan)
-        print(f"📊 整体进度: {stats['completed_groups']}/{stats['total_groups']} 组已完成 ({stats['completed_groups']/stats['total_groups']*100:.1f}%)")
+        print(
+            f"📊 整体进度: {stats['completed_groups']}/{stats['total_groups']} 组已完成 ({stats['completed_groups']/stats['total_groups']*100:.1f}%)"
+        )
 
         return True
 
@@ -303,17 +347,15 @@ class PlanManager:
             # 生成可能的分支名
             possible_branch_names = [
                 f"feat/merge-{group_name.replace('/', '-')}-{assignee.replace(' ', '-')}",
-                f"feat/merge-batch-{assignee.replace(' ', '-')}"
+                f"feat/merge-batch-{assignee.replace(' ', '-')}",
             ]
 
             # 检查是否有对应的远程分支
             for branch_name in possible_branch_names:
                 if any(branch_name in rb for rb in remote_branches):
-                    potentially_completed.append({
-                        "group": group,
-                        "branch": branch_name,
-                        "assignee": assignee
-                    })
+                    potentially_completed.append(
+                        {"group": group, "branch": branch_name, "assignee": assignee}
+                    )
                     break
 
         if potentially_completed:
@@ -332,11 +374,11 @@ class PlanManager:
 
                 # 询问是否标记为完成
                 confirm = input(f"   是否标记为完成? (y/N): ").strip().lower()
-                if confirm == 'y':
+                if confirm == "y":
                     group["status"] = "completed"
                     group["completed_at"] = datetime.now().isoformat()
                     group["auto_detected"] = True
-                    confirmed_completed.append(group['name'])
+                    confirmed_completed.append(group["name"])
                     print(f"   ✅ 已标记完成")
                 else:
                     print(f"   ⏭️ 跳过")
@@ -353,7 +395,9 @@ class PlanManager:
 
             # 显示整体进度
             stats = self.file_helper.get_completion_stats(plan)
-            print(f"\n📈 整体进度: {stats['completed_groups']}/{stats['total_groups']} 组已完成 ({stats['completed_groups']/stats['total_groups']*100:.1f}%)")
+            print(
+                f"\n📈 整体进度: {stats['completed_groups']}/{stats['total_groups']} 组已完成 ({stats['completed_groups']/stats['total_groups']*100:.1f}%)"
+            )
 
             if potentially_completed and not confirmed_completed:
                 print("\n💡 提示: 如果这些分支确实对应已完成的合并，建议手动标记完成")
