@@ -6,7 +6,11 @@ Git Merge Orchestrator - Git操作管理
 import subprocess
 from pathlib import Path
 from datetime import datetime, timedelta
-from config import INTEGRATION_BRANCH_TEMPLATE, MERGE_BRANCH_TEMPLATE, BATCH_BRANCH_TEMPLATE
+from config import (
+    INTEGRATION_BRANCH_TEMPLATE,
+    MERGE_BRANCH_TEMPLATE,
+    BATCH_BRANCH_TEMPLATE,
+)
 
 
 class GitOperations:
@@ -19,8 +23,12 @@ class GitOperations:
         """执行git命令并返回结果"""
         try:
             result = subprocess.run(
-                cmd, shell=True, cwd=self.repo_path,
-                capture_output=True, text=True, check=True
+                cmd,
+                shell=True,
+                cwd=self.repo_path,
+                capture_output=True,
+                text=True,
+                check=True,
             )
             return result.stdout.strip()
         except subprocess.CalledProcessError as e:
@@ -36,7 +44,7 @@ class GitOperations:
         if not result:
             return []
 
-        files = result.split('\n')
+        files = result.split("\n")
         return [f for f in files if f.strip()]
 
     def get_merge_base(self, source_branch, target_branch):
@@ -52,16 +60,19 @@ class GitOperations:
     def create_integration_branch(self, source_branch, target_branch):
         """创建或切换到集成分支"""
         integration_branch = INTEGRATION_BRANCH_TEMPLATE.format(
-            source=source_branch.replace('/', '-'),
-            target=target_branch.replace('/', '-')
+            source=source_branch.replace("/", "-"),
+            target=target_branch.replace("/", "-"),
         )
 
-        # 检查分支是否存在
-        branch_exists = self.run_command(f"git show-ref --verify --quiet refs/heads/{integration_branch}")
+        print(f"🔄 准备集成分支: {integration_branch}")
 
-        if branch_exists is None:
+        # 使用静默检查方法
+        if not self.branch_exists(integration_branch):
             # 分支不存在，创建新分支
-            result = self.run_command(f"git checkout -b {integration_branch} {target_branch}")
+            print(f"📝 分支不存在，正在创建...")
+            result = self.run_command(
+                f"git checkout -b {integration_branch} {target_branch}"
+            )
             if result is not None:
                 print(f"✅ 已创建集成分支: {integration_branch}")
             else:
@@ -69,6 +80,7 @@ class GitOperations:
                 return None
         else:
             # 分支已存在，切换到该分支
+            print(f"📋 分支已存在，正在切换...")
             result = self.run_command(f"git checkout {integration_branch}")
             if result is not None:
                 print(f"✅ 已切换到集成分支: {integration_branch}")
@@ -80,7 +92,9 @@ class GitOperations:
 
     def preview_merge(self, source_branch):
         """预览合并结果"""
-        merge_result = self.run_command(f"git merge --no-commit --no-ff {source_branch} 2>&1 || echo 'merge conflicts detected'")
+        merge_result = self.run_command(
+            f"git merge --no-commit --no-ff {source_branch} 2>&1 || echo 'merge conflicts detected'"
+        )
 
         # 重置合并状态
         self.run_command("git merge --abort 2>/dev/null || true")
@@ -95,7 +109,7 @@ class GitOperations:
         if not result:
             return {}
 
-        authors = result.split('\n')
+        authors = result.split("\n")
         author_counts = {}
         for author in authors:
             if author.strip():
@@ -111,7 +125,7 @@ class GitOperations:
         if not result:
             return {}
 
-        authors = result.split('\n')
+        authors = result.split("\n")
         author_counts = {}
         for author in authors:
             if author.strip():
@@ -121,13 +135,15 @@ class GitOperations:
 
     def get_active_contributors(self, months=3):
         """获取近N个月有提交的活跃贡献者列表"""
-        cutoff_date = (datetime.now() - timedelta(days=months * 30)).strftime('%Y-%m-%d')
+        cutoff_date = (datetime.now() - timedelta(days=months * 30)).strftime(
+            "%Y-%m-%d"
+        )
         cmd = f'git log --since="{cutoff_date}" --format="%an" --all'
         result = self.run_command(cmd)
 
         active_contributors = set()
         if result:
-            for author in result.split('\n'):
+            for author in result.split("\n"):
                 if author.strip():
                     active_contributors.add(author.strip())
 
@@ -140,7 +156,7 @@ class GitOperations:
 
         all_contributors = set()
         if result:
-            for author in result.split('\n'):
+            for author in result.split("\n"):
                 if author.strip():
                     all_contributors.add(author.strip())
 
@@ -153,22 +169,26 @@ class GitOperations:
 
             # 获取一年内的贡献统计
             if include_recent:
-                one_year_ago = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
+                one_year_ago = (datetime.now() - timedelta(days=365)).strftime(
+                    "%Y-%m-%d"
+                )
                 recent_cmd = f'git log --follow --since="{one_year_ago}" --format="%an" -- "{directory_path}"'
                 recent_result = self.run_command(recent_cmd)
 
                 if recent_result:
-                    recent_authors = recent_result.split('\n')
+                    recent_authors = recent_result.split("\n")
                     recent_author_counts = {}
                     for author in recent_authors:
                         if author.strip():
-                            recent_author_counts[author] = recent_author_counts.get(author, 0) + 1
+                            recent_author_counts[author] = (
+                                recent_author_counts.get(author, 0) + 1
+                            )
 
                     for author, count in recent_author_counts.items():
                         contributors[author] = {
-                            'total_commits': count,
-                            'recent_commits': count,
-                            'score': count * 3
+                            "total_commits": count,
+                            "recent_commits": count,
+                            "score": count * 3,
                         }
 
             # 获取总体贡献统计
@@ -176,7 +196,7 @@ class GitOperations:
             total_result = self.run_command(cmd)
 
             if total_result:
-                authors = total_result.split('\n')
+                authors = total_result.split("\n")
                 author_counts = {}
                 for author in authors:
                     if author.strip():
@@ -184,13 +204,15 @@ class GitOperations:
 
                 for author, count in author_counts.items():
                     if author in contributors:
-                        contributors[author]['total_commits'] = count
-                        contributors[author]['score'] = contributors[author]['recent_commits'] * 3 + count
+                        contributors[author]["total_commits"] = count
+                        contributors[author]["score"] = (
+                            contributors[author]["recent_commits"] * 3 + count
+                        )
                     else:
                         contributors[author] = {
-                            'total_commits': count,
-                            'recent_commits': 0,
-                            'score': count
+                            "total_commits": count,
+                            "recent_commits": 0,
+                            "score": count,
                         }
 
             return contributors
@@ -201,8 +223,7 @@ class GitOperations:
     def create_merge_branch(self, group_name, assignee, integration_branch):
         """为指定任务创建合并分支"""
         branch_name = MERGE_BRANCH_TEMPLATE.format(
-            group=group_name.replace('/', '-'),
-            assignee=assignee.replace(' ', '-')
+            group=group_name.replace("/", "-"), assignee=assignee.replace(" ", "-")
         )
 
         # 创建工作分支
@@ -219,10 +240,9 @@ class GitOperations:
 
     def create_batch_merge_branch(self, assignee, integration_branch):
         """创建批量合并分支"""
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         branch_name = BATCH_BRANCH_TEMPLATE.format(
-            assignee=assignee.replace(' ', '-'),
-            timestamp=timestamp
+            assignee=assignee.replace(" ", "-"), timestamp=timestamp
         )
 
         self.run_command(f"git checkout {integration_branch}")
@@ -257,10 +277,10 @@ class GitOperations:
             return set()
 
         remote_branches = set()
-        for line in remote_branches_output.split('\n'):
+        for line in remote_branches_output.split("\n"):
             branch = line.strip()
-            if branch and not branch.startswith('origin/HEAD'):
-                remote_branches.add(branch.replace('origin/', ''))
+            if branch and not branch.startswith("origin/HEAD"):
+                remote_branches.add(branch.replace("origin/", ""))
 
         return remote_branches
 
@@ -275,5 +295,30 @@ class GitOperations:
 
     def get_branch_exists(self, branch_name):
         """检查分支是否存在"""
-        result = self.run_command(f"git show-ref --verify --quiet refs/heads/{branch_name}")
+        result = self.run_command(
+            f"git show-ref --verify --quiet refs/heads/{branch_name}"
+        )
+        return result is not None
+
+    def run_command_silent(self, cmd):
+        """静默执行git命令，用于检查操作，不打印错误信息"""
+        try:
+            result = subprocess.run(
+                cmd,
+                shell=True,
+                cwd=self.repo_path,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            return result.stdout.strip()
+        except subprocess.CalledProcessError:
+            # 静默处理错误，不打印信息
+            return None
+
+    def branch_exists(self, branch_name):
+        """检查分支是否存在（静默检查）"""
+        result = self.run_command_silent(
+            f"git show-ref --verify --quiet refs/heads/{branch_name}"
+        )
         return result is not None

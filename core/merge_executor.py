@@ -24,7 +24,9 @@ class MergeExecutor:
             print("⚠️ 无法确定分叉点，使用简化分析策略")
             return self._simple_file_analysis(files, source_branch, target_branch)
 
-        existing_files, missing_files = self.git_ops.check_file_existence(files, target_branch)
+        existing_files, missing_files = self.git_ops.check_file_existence(
+            files, target_branch
+        )
 
         # 详细分析已存在文件的修改情况
         modified_in_both = []
@@ -33,11 +35,11 @@ class MergeExecutor:
 
         for file in existing_files:
             # 检查源分支相对于merge-base是否有修改
-            source_cmd = f"git diff --quiet {merge_base} {source_branch} -- \"{file}\""
+            source_cmd = f'git diff --quiet {merge_base} {source_branch} -- "{file}"'
             source_modified = self.git_ops.run_command(source_cmd) is None
 
             # 检查目标分支相对于merge-base是否有修改
-            target_cmd = f"git diff --quiet {merge_base} {target_branch} -- \"{file}\""
+            target_cmd = f'git diff --quiet {merge_base} {target_branch} -- "{file}"'
             target_modified = self.git_ops.run_command(target_cmd) is None
 
             if source_modified and target_modified:
@@ -49,11 +51,11 @@ class MergeExecutor:
             # 如果只有target修改，源分支没修改，那这个文件不应该在变更列表中
 
         analysis_result = {
-            'missing_files': missing_files,
-            'modified_only_in_source': modified_only_in_source,
-            'modified_in_both': modified_in_both,
-            'no_changes': no_changes,
-            'merge_base': merge_base
+            "missing_files": missing_files,
+            "modified_only_in_source": modified_only_in_source,
+            "modified_in_both": modified_in_both,
+            "no_changes": no_changes,
+            "merge_base": merge_base,
         }
 
         print(f"📊 文件修改分析结果:")
@@ -66,28 +68,32 @@ class MergeExecutor:
 
     def _simple_file_analysis(self, files, source_branch, target_branch):
         """简化的文件分析策略（当无法确定merge-base时）"""
-        existing_files, missing_files = self.git_ops.check_file_existence(files, target_branch)
+        existing_files, missing_files = self.git_ops.check_file_existence(
+            files, target_branch
+        )
 
         # 简化策略：假设所有已存在文件都可能有冲突
         return {
-            'missing_files': missing_files,
-            'modified_only_in_source': [],
-            'modified_in_both': existing_files,  # 保守策略：都当作可能冲突处理
-            'no_changes': [],
-            'merge_base': None
+            "missing_files": missing_files,
+            "modified_only_in_source": [],
+            "modified_in_both": existing_files,  # 保守策略：都当作可能冲突处理
+            "no_changes": [],
+            "merge_base": None,
         }
 
-    def generate_smart_merge_script(self, group_name, assignee, files, branch_name, source_branch, target_branch):
+    def generate_smart_merge_script(
+        self, group_name, assignee, files, branch_name, source_branch, target_branch
+    ):
         """生成改进的智能合并脚本，使用真正的三路合并策略"""
 
         # 分析文件修改情况
         analysis = self.analyze_file_modifications(files, source_branch, target_branch)
 
-        missing_files = analysis['missing_files']
-        modified_only_in_source = analysis['modified_only_in_source']
-        modified_in_both = analysis['modified_in_both']
-        no_changes = analysis['no_changes']
-        merge_base = analysis['merge_base']
+        missing_files = analysis["missing_files"]
+        modified_only_in_source = analysis["modified_only_in_source"]
+        modified_in_both = analysis["modified_in_both"]
+        no_changes = analysis["no_changes"]
+        merge_base = analysis["merge_base"]
 
         # 生成改进的处理脚本
         script_content = f"""#!/bin/bash
@@ -298,18 +304,27 @@ fi
 
         return script_content
 
-    def generate_batch_merge_script(self, assignee, assignee_groups, all_files, batch_branch_name,
-                                  source_branch, target_branch):
+    def generate_batch_merge_script(
+        self,
+        assignee,
+        assignee_groups,
+        all_files,
+        batch_branch_name,
+        source_branch,
+        target_branch,
+    ):
         """生成改进的批量合并脚本"""
 
         # 分析所有文件的修改情况
         print(f"🔍 正在分析负责人 '{assignee}' 的所有文件...")
-        analysis = self.analyze_file_modifications(all_files, source_branch, target_branch)
+        analysis = self.analyze_file_modifications(
+            all_files, source_branch, target_branch
+        )
 
-        missing_files = analysis['missing_files']
-        modified_only_in_source = analysis['modified_only_in_source']
-        modified_in_both = analysis['modified_in_both']
-        no_changes = analysis['no_changes']
+        missing_files = analysis["missing_files"]
+        modified_only_in_source = analysis["modified_only_in_source"]
+        modified_in_both = analysis["modified_in_both"]
+        no_changes = analysis["no_changes"]
 
         script_content = f"""#!/bin/bash
 # 改进的批量智能合并脚本 - 负责人: {assignee}
@@ -497,11 +512,18 @@ fi
         print(f"📁 文件数: {group_info.get('file_count', len(group_info['files']))}")
 
         # 创建合并分支
-        branch_name = self.git_ops.create_merge_branch(group_name, assignee, integration_branch)
+        branch_name = self.git_ops.create_merge_branch(
+            group_name, assignee, integration_branch
+        )
 
         # 生成改进的智能合并脚本
         script_content = self.generate_smart_merge_script(
-            group_name, assignee, group_info["files"], branch_name, source_branch, target_branch
+            group_name,
+            assignee,
+            group_info["files"],
+            branch_name,
+            source_branch,
+            target_branch,
         )
 
         script_file = self.file_helper.create_script_file(
@@ -514,7 +536,9 @@ fi
 
         return True
 
-    def merge_assignee_tasks(self, assignee_name, source_branch, target_branch, integration_branch):
+    def merge_assignee_tasks(
+        self, assignee_name, source_branch, target_branch, integration_branch
+    ):
         """合并指定负责人的所有任务"""
         plan = self.file_helper.load_plan()
         if not plan:
@@ -527,7 +551,7 @@ fi
             print(f"❌ 负责人 '{assignee_name}' 没有分配的任务")
             return False
 
-        total_files = sum(g.get('file_count', len(g['files'])) for g in assignee_groups)
+        total_files = sum(g.get("file_count", len(g["files"])) for g in assignee_groups)
         print(f"🎯 开始批量合并负责人 '{assignee_name}' 的所有任务...")
         print(f"📋 共 {len(assignee_groups)} 个组，总计 {total_files} 个文件")
 
@@ -541,11 +565,18 @@ fi
             return False
 
         # 创建统一的合并分支
-        batch_branch_name = self.git_ops.create_batch_merge_branch(assignee_name, integration_branch)
+        batch_branch_name = self.git_ops.create_batch_merge_branch(
+            assignee_name, integration_branch
+        )
 
         # 生成改进的智能批量合并脚本
         script_content = self.generate_batch_merge_script(
-            assignee_name, assignee_groups, all_files, batch_branch_name, source_branch, target_branch
+            assignee_name,
+            assignee_groups,
+            all_files,
+            batch_branch_name,
+            source_branch,
+            target_branch,
         )
 
         script_file = self.file_helper.create_script_file(
@@ -586,7 +617,7 @@ fi
         print(f"🔍 发现 {len(completed_branches)} 个已完成的分支:")
         total_files = 0
         for branch_name, group in completed_branches:
-            file_count = group.get('file_count', len(group['files']))
+            file_count = group.get("file_count", len(group["files"]))
             total_files += file_count
             print(f" - {branch_name} ({file_count} 文件)")
 
@@ -596,7 +627,9 @@ fi
         all_success = True
         for branch_name, group in completed_branches:
             print(f"🔄 正在合并分支: {branch_name}")
-            success = self.git_ops.merge_branch_to_integration(branch_name, group['name'], integration_branch)
+            success = self.git_ops.merge_branch_to_integration(
+                branch_name, group["name"], integration_branch
+            )
             if success:
                 print(f" ✅ 成功合并 {branch_name}")
             else:
