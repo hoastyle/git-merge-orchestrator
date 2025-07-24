@@ -206,6 +206,9 @@ class ContributorAnalyzer:
 
     def get_workload_distribution(self, plan):
         """获取负载分布统计"""
+        if not plan or "groups" not in plan:
+            return {}
+
         assignee_workload = {}
         for group in plan["groups"]:
             assignee = group.get("assignee")
@@ -213,8 +216,8 @@ class ContributorAnalyzer:
                 if assignee not in assignee_workload:
                     assignee_workload[assignee] = {"groups": 0, "files": 0, "completed": 0, "fallback": 0}
                 assignee_workload[assignee]["groups"] += 1
-                assignee_workload[assignee]["files"] += group.get("file_count", len(group["files"]))
-                if group["status"] == "completed":
+                assignee_workload[assignee]["files"] += group.get("file_count", len(group.get("files", [])))
+                if group.get("status") == "completed":
                     assignee_workload[assignee]["completed"] += 1
                 if group.get("fallback_reason"):
                     assignee_workload[assignee]["fallback"] += 1

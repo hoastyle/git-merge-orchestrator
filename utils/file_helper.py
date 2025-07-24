@@ -247,13 +247,23 @@ class FileHelper:
 
     def get_completion_stats(self, plan):
         """获取完成统计"""
+        if not plan or "groups" not in plan:
+            return {
+                "total_groups": 0,
+                "assigned_groups": 0,
+                "completed_groups": 0,
+                "total_files": 0,
+                "assigned_files": 0,
+                "completed_files": 0
+            }
+
         total_groups = len(plan["groups"])
         assigned_groups = sum(1 for g in plan["groups"] if g.get("assignee"))
         completed_groups = sum(1 for g in plan["groups"] if g.get("status") == "completed")
 
-        total_files = plan["total_files"]
-        assigned_files = sum(g.get("file_count", len(g["files"])) for g in plan["groups"] if g.get("assignee"))
-        completed_files = sum(g.get("file_count", len(g["files"])) for g in plan["groups"] if g.get("status") == "completed")
+        total_files = plan.get("total_files", 0)
+        assigned_files = sum(g.get("file_count", len(g.get("files", []))) for g in plan["groups"] if g.get("assignee"))
+        completed_files = sum(g.get("file_count", len(g.get("files", []))) for g in plan["groups"] if g.get("status") == "completed")
 
         return {
             "total_groups": total_groups,

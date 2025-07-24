@@ -57,16 +57,20 @@ def show_welcome_banner(orchestrator):
     print(f"工作目录: {orchestrator.repo_path}")
 
     # 显示计划摘要（如果存在）
-    summary = orchestrator.get_plan_summary()
-    if summary:
-        stats = summary['stats']
-        print(f"\n📊 当前计划状态:")
-        print(f"   总分组: {stats['total_groups']} 个")
-        print(f"   总文件: {stats['total_files']} 个")
-        print(f"   已分配: {stats['assigned_groups']} 组 ({stats['assigned_files']} 文件)")
-        print(f"   已完成: {stats['completed_groups']} 组 ({stats['completed_files']} 文件)")
-        if summary['integration_branch']:
-            print(f"   集成分支: {summary['integration_branch']}")
+    try:
+        summary = orchestrator.get_plan_summary()
+        if summary and summary.get('stats'):
+            stats = summary['stats']
+            print(f"\n📊 当前计划状态:")
+            print(f"   总分组: {stats.get('total_groups', 0)} 个")
+            print(f"   总文件: {stats.get('total_files', 0)} 个")
+            print(f"   已分配: {stats.get('assigned_groups', 0)} 组 ({stats.get('assigned_files', 0)} 文件)")
+            print(f"   已完成: {stats.get('completed_groups', 0)} 组 ({stats.get('completed_files', 0)} 文件)")
+            if summary.get('integration_branch'):
+                print(f"   集成分支: {summary['integration_branch']}")
+    except Exception as e:
+        # 如果获取摘要失败，不影响主程序运行
+        pass
 
     print("="*80)
 

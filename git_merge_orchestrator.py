@@ -399,18 +399,22 @@ class GitMergeOrchestrator:
 
     def get_plan_summary(self):
         """获取计划摘要信息"""
-        plan = self.file_helper.load_plan()
-        if not plan:
+        try:
+            plan = self.file_helper.load_plan()
+            if not plan:
+                return None
+
+            stats = self.file_helper.get_completion_stats(plan)
+            workload = self.contributor_analyzer.get_workload_distribution(plan)
+
+            return {
+                'plan': plan,
+                'stats': stats,
+                'workload': workload,
+                'source_branch': self.source_branch,
+                'target_branch': self.target_branch,
+                'integration_branch': self.integration_branch
+            }
+        except Exception as e:
+            # 如果获取摘要失败，返回None而不是抛出异常
             return None
-
-        stats = self.file_helper.get_completion_stats(plan)
-        workload = self.contributor_analyzer.get_workload_distribution(plan)
-
-        return {
-            'plan': plan,
-            'stats': stats,
-            'workload': workload,
-            'source_branch': self.source_branch,
-            'target_branch': self.target_branch,
-            'integration_branch': self.integration_branch
-        }

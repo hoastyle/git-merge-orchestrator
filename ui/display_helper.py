@@ -158,9 +158,18 @@ class DisplayHelper:
     @staticmethod
     def format_completion_stats(stats):
         """格式化完成统计"""
-        completion_info = f"📈 进度统计: {stats['assigned_groups']}/{stats['total_groups']} 组已分配 "
-        completion_info += f"({stats['assigned_files']}/{stats['total_files']} 文件), "
-        completion_info += f"{stats['completed_groups']}/{stats['total_groups']} 组已完成"
+        if not stats:
+            return "📈 进度统计: 数据不可用"
+
+        assigned_groups = stats.get('assigned_groups', 0)
+        total_groups = stats.get('total_groups', 0)
+        assigned_files = stats.get('assigned_files', 0)
+        total_files = stats.get('total_files', 0)
+        completed_groups = stats.get('completed_groups', 0)
+
+        completion_info = f"📈 进度统计: {assigned_groups}/{total_groups} 组已分配 "
+        completion_info += f"({assigned_files}/{total_files} 文件), "
+        completion_info += f"{completed_groups}/{total_groups} 组已完成"
         return completion_info
 
     @staticmethod

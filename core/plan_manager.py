@@ -119,16 +119,20 @@ class PlanManager:
             return
 
         print("📊 智能合并状态概览:")
-        print(f"源分支: {plan['source_branch']}")
-        print(f"目标分支: {plan['target_branch']}")
-        print(f"集成分支: {plan['integration_branch']}")
-        print(f"总文件数: {plan['total_files']}")
+        print(f"源分支: {plan.get('source_branch', 'N/A')}")
+        print(f"目标分支: {plan.get('target_branch', 'N/A')}")
+        print(f"集成分支: {plan.get('integration_branch', 'N/A')}")
+        print(f"总文件数: {plan.get('total_files', 0)}")
         print(f"每组最大文件数: {plan.get('max_files_per_group', 5)}")
         print()
 
         # 获取统计信息
-        stats = self.file_helper.get_completion_stats(plan)
-        workload = self.contributor_analyzer.get_workload_distribution(plan)
+        try:
+            stats = self.file_helper.get_completion_stats(plan)
+            workload = self.contributor_analyzer.get_workload_distribution(plan)
+        except Exception as e:
+            print(f"⚠️ 获取统计信息时出错: {e}")
+            return
 
         print("📋 智能分组与任务分配状态:")
 
@@ -138,10 +142,10 @@ class PlanManager:
         table_data = []
         fallback_assigned = 0
 
-        for group in plan["groups"]:
-            status_icon = "✅" if group["status"] == "completed" else "🔄" if group.get("assignee") else "⏳"
+        for group in plan.get("groups", []):
+            status_icon = "✅" if group.get("status") == "completed" else "🔄" if group.get("assignee") else "⏳"
             assignee = group.get("assignee", "未分配")
-            file_count = group.get("file_count", len(group["files"]))
+            file_count = group.get("file_count", len(group.get("files", [])))
 
             # 获取分配类型
             assignment_reason = group.get("assignment_reason", "未指定")
@@ -160,7 +164,7 @@ class PlanManager:
                         recent_commits = contributor_stats.get('recent_commits', 0)
                         score = contributor_stats.get('score', 0)
                         if is_fallback:
-                            recommended_info = f"[备选]{group['fallback_reason'][:15]}"
+                            recommended_info = f"[备选]{group.get('fallback_reason', '')[:15]}"
                         else:
                             recommended_info = f"得分:{score}(近期:{recent_commits})"
                     else:
@@ -180,18 +184,20 @@ class PlanManager:
                         recommended_info = "分析中..."
 
             table_data.append([
-                group['name'], str(file_count), assignee, status_icon, assignment_type, recommended_info
+                group.get('name', 'N/A'), str(file_count), assignee, status_icon, assignment_type, recommended_info
             ])
 
-        DisplayHelper.print_table('status_overview', table_data)
+        if table_data:
+            DisplayHelper.print_table('status_overview', table_data)
 
         completion_info = DisplayHelper.format_completion_stats(stats)
         print(completion_info)
         print(f"🔄 备选分配: {fallback_assigned} 组通过目录分析分配")
 
-        if stats['assigned_groups'] < stats['total_groups']:
-            unassigned = [g['name'] for g in plan['groups'] if not g.get('assignee')]
-            print(f"\n⚠️ 未分配的组: {', '.join(unassigned[:5])}" + ("..." if len(unassigned) > 5 else ""))
+        if stats.get('assigned_groups', 0) < stats.get('total_groups', 0):
+            unassigned = [g.get('name', 'N/A') for g in plan.get('groups', []) if not g.get('assignee')]
+            if unassigned:
+                print(f"\n⚠️ 未分配的组: {', '.join(unassigned[:5])}" + ("..." if len(unassigned) > 5 else ""))
 
         # 显示负载分布
         workload_info = DisplayHelper.format_workload_distribution(workload)
