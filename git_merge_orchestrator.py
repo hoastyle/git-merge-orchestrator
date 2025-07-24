@@ -14,6 +14,9 @@ from utils.file_helper import FileHelper
 from ui.display_helper import DisplayHelper
 from core.git_operations import GitOperations
 from core.contributor_analyzer import ContributorAnalyzer
+from core.optimized_contributor_analyzer import OptimizedContributorAnalyzer
+from core.optimized_task_assigner import OptimizedTaskAssigner
+
 from core.task_assigner import TaskAssigner
 from core.merge_executor import MergeExecutor
 from core.plan_manager import PlanManager
@@ -31,8 +34,10 @@ class GitMergeOrchestrator:
         # 初始化核心组件
         self.git_ops = GitOperations(repo_path)
         self.file_helper = FileHelper(repo_path, max_files_per_group)
-        self.contributor_analyzer = ContributorAnalyzer(self.git_ops)
-        self.task_assigner = TaskAssigner(self.contributor_analyzer)
+        # self.contributor_analyzer = ContributorAnalyzer(self.git_ops)
+        # self.task_assigner = TaskAssigner(self.contributor_analyzer)
+        self.contributor_analyzer = OptimizedContributorAnalyzer(self.git_ops)
+        self.task_assigner = OptimizedTaskAssigner(self.contributor_analyzer)
         self.merge_executor = MergeExecutor(self.git_ops, self.file_helper)
         self.plan_manager = PlanManager(self.git_ops, self.file_helper, self.contributor_analyzer)
 
@@ -81,13 +86,45 @@ class GitMergeOrchestrator:
 
     def auto_assign_tasks(self, exclude_authors=None, max_tasks_per_person=DEFAULT_MAX_TASKS_PER_PERSON,
                          include_fallback=True):
-        """智能自动分配任务"""
+        # """智能自动分配任务"""
+        # plan = self.file_helper.load_plan()
+        # if not plan:
+        #     DisplayHelper.print_error("合并计划文件不存在，请先运行创建合并计划")
+        #     return None
+
+        # result = self.task_assigner.auto_assign_tasks(
+        #     plan, exclude_authors, max_tasks_per_person, include_fallback
+        # )
+
+        # if result:
+        #     # 保存更新后的计划
+        #     self.file_helper.save_plan(plan)
+
+        #     # 显示分配总结
+        #     active_contributors = result['active_contributors']
+        #     inactive_contributors = result['inactive_contributors']
+        #     assignment_count = result['assignment_count']
+        #     unassigned_groups = result['unassigned_groups']
+
+        #     print(f"\n📊 自动分配总结:")
+        #     print(f"🎯 活跃贡献者: {len(active_contributors)} 位")
+        #     print(f"🚫 自动排除: {len(inactive_contributors)} 位（近3个月无提交）")
+        #     print(f"🔧 手动排除: {len(exclude_authors or [])} 位")
+
+        #     summary = DisplayHelper.format_assignment_summary(assignment_count, unassigned_groups)
+        #     print(summary)
+
+        #     DisplayHelper.print_success("智能自动分配完成")
+
+        # return plan
+        """智能自动分配任务（优化版）"""
         plan = self.file_helper.load_plan()
         if not plan:
             DisplayHelper.print_error("合并计划文件不存在，请先运行创建合并计划")
             return None
 
-        result = self.task_assigner.auto_assign_tasks(
+        # 使用优化版分配器
+        result = self.task_assigner.turbo_auto_assign_tasks(
             plan, exclude_authors, max_tasks_per_person, include_fallback
         )
 
@@ -95,7 +132,12 @@ class GitMergeOrchestrator:
             # 保存更新后的计划
             self.file_helper.save_plan(plan)
 
-            # 显示分配总结
+            # 显示性能优化报告
+            if 'performance_stats' in result:
+                perf_report = self.task_assigner.get_optimization_report(result['performance_stats'])
+                print(perf_report)
+
+            # 原有的分配总结显示
             active_contributors = result['active_contributors']
             inactive_contributors = result['inactive_contributors']
             assignment_count = result['assignment_count']
@@ -109,7 +151,7 @@ class GitMergeOrchestrator:
             summary = DisplayHelper.format_assignment_summary(assignment_count, unassigned_groups)
             print(summary)
 
-            DisplayHelper.print_success("智能自动分配完成")
+            DisplayHelper.print_success("涡轮增压自动分配完成")
 
         return plan
 

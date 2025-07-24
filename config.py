@@ -82,3 +82,9 @@ SCORING_WEIGHTS = {
     'recent_commits': 3,  # 一年内提交权重
     'total_commits': 1    # 历史提交权重
 }
+
+# 性能优化配置
+CACHE_EXPIRY_HOURS = 24  # 缓存过期时间（小时）
+MAX_WORKER_THREADS = 4   # 最大并行线程数
+BATCH_SIZE_THRESHOLD = 10  # 启用批量处理的最小文件数
+ENABLE_PERFORMANCE_MONITORING = True  # 是否启用性能监控
