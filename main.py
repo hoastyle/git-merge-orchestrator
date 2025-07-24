@@ -33,6 +33,7 @@ def parse_arguments():
   • 备选分配策略 - 文件级→目录级→根目录级的层次化分配
   • 批量操作支持 - 支持按负责人批量合并和状态管理
   • 进度跟踪 - 完整的任务状态跟踪和远程分支检测
+  • 交互式合并 - 支持文件级策略选择，适用于大分叉场景
         """
     )
 
@@ -42,7 +43,7 @@ def parse_arguments():
                        help='每组最大文件数 (默认: 5)')
     parser.add_argument('--repo', default='.',
                        help='Git仓库路径 (默认: 当前目录)')
-    parser.add_argument('--version', action='version', version='Git Merge Orchestrator 2.0')
+    parser.add_argument('--version', action='version', version='Git Merge Orchestrator 2.1')
 
     return parser.parse_args()
 
@@ -151,13 +152,66 @@ def handle_status_management_menu(orchestrator):
         DisplayHelper.print_warning("无效选择")
 
 
+def handle_interactive_merge_menu(orchestrator):
+    """处理交互式合并菜单"""
+    print("🎯 交互式智能合并:")
+    print("a. 交互式合并指定组")
+    print("b. 交互式合并指定负责人的所有任务 (开发中)")
+    print("c. 返回主菜单")
+
+    sub_choice = input("请选择操作 (a-c): ").strip().lower()
+    if sub_choice == 'a':
+        group_name = input("请输入要交互式合并的组名: ").strip()
+        if group_name:
+            orchestrator.interactive_merge_group(group_name)
+        else:
+            DisplayHelper.print_warning("组名不能为空")
+
+    elif sub_choice == 'b':
+        assignee_name = input("请输入负责人姓名: ").strip()
+        if assignee_name:
+            print("🔄 交互式批量合并功能开发中...")
+            print("💡 建议：先使用单组交互式合并，积累经验后再批量处理")
+            print("📋 您可以:")
+            print("   1. 使用菜单7查看该负责人的所有任务")
+            print("   2. 逐个使用交互式合并处理每个组")
+            print("   3. 对于简单组，使用菜单6的自动合并")
+        else:
+            DisplayHelper.print_warning("负责人姓名不能为空")
+
+    elif sub_choice == 'c':
+        return
+    else:
+        DisplayHelper.print_warning("无效选择")
+
+
+def show_updated_menu():
+    """显示更新后的主菜单"""
+    print("\n📋 可用操作:")
+    print("1. 分析分支分叉")
+    print("2. 创建智能合并计划")
+    print("3. 智能自动分配任务 (含活跃度过滤+备选方案)")
+    print("4. 手动分配任务")
+    print("5. 查看贡献者智能分析")
+    print("6. 合并指定组 (自动策略)")
+    print("7. 搜索负责人任务")
+    print("8. 合并指定负责人的所有任务 (自动策略)")
+    print("9. 检查状态 (可选择显示模式)")
+    print("10. 查看分组详细信息")
+    print("11. 查看分配原因分析")
+    print("12. 完成状态管理 (标记完成/检查远程状态)")
+    print("13. 完成最终合并")
+    print("14. 🎯 交互式智能合并 (策略选择) ✨")
+    print("0. 退出")
+
+
 def run_interactive_menu(orchestrator):
     """运行交互式菜单"""
     while True:
-        DisplayHelper.show_menu()
+        show_updated_menu()
 
         try:
-            choice = input("\n请选择操作 (0-13): ").strip()
+            choice = input("\n请选择操作 (0-14): ").strip()
 
             if choice == '0':
                 print("👋 感谢使用Git Merge Orchestrator！")
@@ -227,8 +281,11 @@ def run_interactive_menu(orchestrator):
             elif choice == '13':
                 orchestrator.finalize_merge()
 
+            elif choice == '14':
+                handle_interactive_merge_menu(orchestrator)
+
             else:
-                DisplayHelper.print_warning("无效选择，请输入0-13之间的数字")
+                DisplayHelper.print_warning("无效选择，请输入0-14之间的数字")
 
         except KeyboardInterrupt:
             print("\n\n👋 用户中断，正在退出...")

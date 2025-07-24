@@ -39,6 +39,9 @@ class GitMergeOrchestrator:
         # 缓存集成分支名
         self._integration_branch = None
 
+        # 延迟加载交互式合并执行器（避免循环导入）
+        self._interactive_executor = None
+
     @property
     def integration_branch(self):
         """获取集成分支名"""
@@ -47,6 +50,18 @@ class GitMergeOrchestrator:
             if plan:
                 self._integration_branch = plan.get('integration_branch')
         return self._integration_branch
+
+    @property
+    def interactive_executor(self):
+        """获取交互式合并执行器（延迟加载）"""
+        if self._interactive_executor is None:
+            try:
+                from core.interactive_merge_executor import InteractiveMergeExecutor
+                self._interactive_executor = InteractiveMergeExecutor(self.git_ops, self.file_helper)
+            except ImportError as e:
+                DisplayHelper.print_error(f"无法加载交互式合并模块: {e}")
+                return None
+        return self._interactive_executor
 
     def analyze_divergence(self):
         """分析分支分叉情况"""
@@ -411,6 +426,20 @@ class GitMergeOrchestrator:
 
         return self.merge_executor.merge_assignee_tasks(
             assignee_name, self.source_branch, self.target_branch, self.integration_branch
+        )
+
+    def interactive_merge_group(self, group_name):
+        """交互式合并指定组"""
+        if not self.integration_branch:
+            DisplayHelper.print_error("无法确定集成分支，请先创建合并计划")
+            return False
+
+        if not self.interactive_executor:
+            DisplayHelper.print_error("交互式合并模块不可用")
+            return False
+
+        return self.interactive_executor.interactive_merge_group(
+            group_name, self.source_branch, self.target_branch, self.integration_branch
         )
 
     def mark_group_completed(self, group_name):
