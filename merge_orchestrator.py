@@ -21,6 +21,64 @@ class GitMergeTool:
         self._active_contributors_cache = None
         self._all_contributors_cache = None
 
+    def _get_display_width(self, text):
+        """计算显示宽度，考虑中文字符"""
+        width = 0
+        for char in str(text):
+            if ord(char) > 127:  # 中文字符
+                width += 2
+            else:  # 英文字符
+                width += 1
+        return width
+
+    def _format_table_cell(self, text, width, align='left'):
+        """格式化表格单元格，确保对齐"""
+        text_str = str(text)
+        display_width = self._get_display_width(text_str)
+        padding = width - display_width
+
+        if padding <= 0:
+            return text_str[:width]
+
+        if align == 'left':
+            return text_str + ' ' * padding
+        elif align == 'right':
+            return ' ' * padding + text_str
+        elif align == 'center':
+            left_pad = padding // 2
+            right_pad = padding - left_pad
+            return ' ' * left_pad + text_str + ' ' * right_pad
+
+        return text_str
+
+    def _print_table_separator(self, widths):
+        """打印表格分隔线"""
+        total_width = sum(widths) + len(widths) - 1
+        print('-' * total_width)
+
+    def _print_table_header(self, headers, widths, aligns=None):
+        """打印表格标题行"""
+        if aligns is None:
+            aligns = ['left'] * len(headers)
+
+        row = []
+        for i, (header, width, align) in enumerate(zip(headers, widths, aligns)):
+            row.append(self._format_table_cell(header, width, align))
+
+        print(' '.join(row))
+        self._print_table_separator(widths)
+
+    def _print_table_row(self, values, widths, aligns=None):
+        """打印表格数据行"""
+        if aligns is None:
+            aligns = ['left'] * len(values)
+
+        row = []
+        for i, (value, width, align) in enumerate(zip(values, widths, aligns)):
+            row.append(self._format_table_cell(value, width, align))
+
+        print(' '.join(row))
+
     def run_git_command(self, cmd):
         """执行git命令并返回结果"""
         try:
@@ -703,9 +761,13 @@ class GitMergeTool:
         else:
             # 交互式选择查看
             print("📋 可用分组列表:")
-            print("-" * 120)
-            print(f"{'序号':<4} {'组名':<25} {'类型':<15} {'文件数':<8} {'负责人':<15} {'状态':<8}")
-            print("-" * 120)
+
+            # 优化表格显示 - 使用固定列宽
+            headers = ["序号", "组名", "类型", "文件数", "负责人", "状态"]
+            widths = [6, 30, 18, 8, 20, 8]
+            aligns = ['center', 'left', 'left', 'center', 'left', 'center']
+
+            self._print_table_header(headers, widths, aligns)
 
             for i, group in enumerate(plan["groups"], 1):
                 assignee = group.get("assignee", "未分配")
@@ -713,9 +775,10 @@ class GitMergeTool:
                 group_type = group.get("group_type", "unknown")
                 file_count = group.get("file_count", len(group["files"]))
 
-                print(f"{i:<4} {group['name']:<25} {group_type:<15} {file_count:<8} {assignee:<15} {status:<8}")
+                values = [str(i), group['name'], group_type, str(file_count), assignee, status]
+                self._print_table_row(values, widths, aligns)
 
-            print("-" * 120)
+            self._print_table_separator(widths)
 
             try:
                 choice = input("请输入要查看的组序号 (回车返回): ").strip()
@@ -764,12 +827,16 @@ class GitMergeTool:
         for i, file_path in enumerate(files, 1):
             print(f"   {i:2d}. {file_path}")
 
-        # 贡献者分析
+        # 贡献者分析 - 优化表格显示
         contributors = group.get('contributors', {})
         if contributors:
             print(f"\n👥 贡献者分析 (基于一年内活跃度):")
-            print(f"{'排名':<4} {'贡献者':<20} {'一年内':<8} {'历史总计':<8} {'综合得分':<8} {'参与文件':<8}")
-            print("-" * 70)
+
+            headers = ["排名", "贡献者", "一年内", "历史总计", "综合得分", "参与文件"]
+            widths = [6, 25, 10, 12, 12, 12]
+            aligns = ['center', 'left', 'center', 'center', 'center', 'center']
+
+            self._print_table_header(headers, widths, aligns)
 
             sorted_contributors = sorted(contributors.items(), key=lambda x: x[1]['score'] if isinstance(x[1], dict) else x[1], reverse=True)
             for i, (author, stats) in enumerate(sorted_contributors[:10], 1):
@@ -778,9 +845,11 @@ class GitMergeTool:
                     total = stats.get('total_commits', 0)
                     score = stats.get('score', 0)
                     file_count = stats.get('file_count', 0)
-                    print(f"{i:<4} {author:<20} {recent:<8} {total:<8} {score:<8} {file_count:<8}")
+                    values = [str(i), author, str(recent), str(total), str(score), str(file_count)]
                 else:
-                    print(f"{i:<4} {author:<20} {'N/A':<8} {stats:<8} {stats:<8} {'N/A':<8}")
+                    values = [str(i), author, 'N/A', str(stats), str(stats), 'N/A']
+
+                self._print_table_row(values, widths, aligns)
 
             if len(sorted_contributors) > 10:
                 print(f"   ... 还有 {len(sorted_contributors) - 10} 位贡献者")
@@ -828,9 +897,14 @@ class GitMergeTool:
         for reason_type, groups in reason_stats.items():
             print(f"   {reason_type}: {len(groups)} 个组")
 
-        print("\n" + "-"*120)
-        print(f"{'组名':<25} {'负责人':<15} {'文件数':<8} {'分配类型':<15} {'详细原因':<50}")
-        print("-"*120)
+        print()
+
+        # 优化表格显示
+        headers = ["组名", "负责人", "文件数", "分配类型", "详细原因"]
+        widths = [30, 20, 8, 18, 50]
+        aligns = ['left', 'left', 'center', 'left', 'left']
+
+        self._print_table_header(headers, widths, aligns)
 
         for group in plan["groups"]:
             assignee = group.get('assignee', '未分配')
@@ -841,9 +915,10 @@ class GitMergeTool:
             # 截断过长的原因说明
             short_reason = assignment_reason[:45] + "..." if len(assignment_reason) > 45 else assignment_reason
 
-            print(f"{group['name']:<25} {assignee:<15} {file_count:<8} {reason_type:<15} {short_reason:<50}")
+            values = [group['name'], assignee, str(file_count), reason_type, short_reason]
+            self._print_table_row(values, widths, aligns)
 
-        print("-"*120)
+        self._print_table_separator(widths)
 
         # 分类详细展示
         print(f"\n📋 分类详细分析:")
@@ -906,9 +981,13 @@ class GitMergeTool:
 
         print(f"👤 负责人: {assignee_name}")
         print(f"📊 总览: {len(assignee_groups)} 个组, {total_files} 个文件")
-        print("-" * 120)
-        print(f"{'组名':<25} {'文件数':<8} {'状态':<8} {'类型':<15} {'分配原因':<30}")
-        print("-" * 120)
+
+        # 优化表格显示
+        headers = ["组名", "文件数", "状态", "类型", "分配原因"]
+        widths = [30, 8, 8, 18, 40]
+        aligns = ['left', 'center', 'center', 'left', 'left']
+
+        self._print_table_header(headers, widths, aligns)
 
         completed = 0
         pending = 0
@@ -926,11 +1005,12 @@ class GitMergeTool:
                 pending += 1
 
             # 截断长的分配原因
-            short_reason = assignment_reason[:25] + "..." if len(assignment_reason) > 25 else assignment_reason
+            short_reason = assignment_reason[:35] + "..." if len(assignment_reason) > 35 else assignment_reason
 
-            print(f"{group['name']:<25} {file_count:<8} {status_icon:<8} {group_type:<15} {short_reason:<30}")
+            values = [group['name'], str(file_count), status_icon, group_type, short_reason]
+            self._print_table_row(values, widths, aligns)
 
-        print("-" * 120)
+        self._print_table_separator(widths)
         print(f"📈 进度: {completed}/{len(assignee_groups)} 组已完成, {pending} 组待处理")
 
         # 显示详细文件列表
@@ -1392,9 +1472,13 @@ fi
         fallback_assigned = 0
 
         print("📋 智能分组与任务分配状态:")
-        print("-" * 120)
-        print(f"{'组名':<25} {'文件数':<6} {'负责人':<15} {'状态':<6} {'分配类型':<10} {'推荐理由':<30}")
-        print("-" * 120)
+
+        # 优化表格显示
+        headers = ["组名", "文件数", "负责人", "状态", "分配类型", "推荐理由"]
+        widths = [30, 8, 20, 8, 12, 35]
+        aligns = ['left', 'center', 'left', 'center', 'left', 'left']
+
+        self._print_table_header(headers, widths, aligns)
 
         for group in plan["groups"]:
             status_icon = "✅" if group["status"] == "completed" else "🔄" if group.get("assignee") else "⏳"
@@ -1439,7 +1523,8 @@ fi
                     except:
                         recommended_info = "分析中..."
 
-            print(f"{group['name']:<25} {file_count:<6} {assignee:<15} {status_icon:<6} {assignment_type:<10} {recommended_info:<30}")
+            values = [group['name'], str(file_count), assignee, status_icon, assignment_type, recommended_info]
+            self._print_table_row(values, widths, aligns)
 
             if assignee != "未分配":
                 assigned_count += 1
@@ -1447,7 +1532,7 @@ fi
                 if group["status"] == "completed":
                     completed_count += 1
 
-        print("-" * 120)
+        self._print_table_separator(widths)
         print(f"📈 进度统计: {assigned_count}/{total_groups} 组已分配 ({total_files_assigned}/{plan['total_files']} 文件), {completed_count}/{total_groups} 组已完成")
         print(f"🔄 备选分配: {fallback_assigned} 组通过目录分析分配")
 
@@ -1569,9 +1654,13 @@ fi
 
         if all_contributors_global:
             print(f"\n🏆 全局贡献者智能排名 (基于一年内活跃度):")
-            print("-" * 100)
-            print("排名 姓名 近期 历史 得分 活跃状态 参与组 分配组 近期活跃")
-            print("-" * 100)
+
+            # 优化表格显示
+            headers = ["排名", "姓名", "近期", "历史", "得分", "活跃状态", "参与组", "分配组", "近期活跃"]
+            widths = [6, 20, 6, 6, 8, 10, 8, 8, 10]
+            aligns = ['center', 'left', 'center', 'center', 'center', 'center', 'center', 'center', 'center']
+
+            self._print_table_header(headers, widths, aligns)
 
             sorted_global = sorted(all_contributors_global.items(), key=lambda x: x[1]['score'], reverse=True)
 
@@ -1598,7 +1687,8 @@ fi
                 assigned_display = f"{assigned}组" if assigned > 0 else "无"
                 active_status = "✅" if is_active else "❌"
 
-                print(f"{i:2d} {author:<15} {recent:4d} {total:4d} {score:5d} {activity:<4} {contributed:4d} {assigned_display:<6} {active_status}")
+                values = [str(i), author, str(recent), str(total), str(score), activity, str(contributed), assigned_display, active_status]
+                self._print_table_row(values, widths, aligns)
 
             print(f"\n📊 活跃度说明 (基于一年内提交 + 近3个月活跃度):")
             print("🔥高: 15+次 📈中: 5-14次 📊低: 1-4次 📊近期: 近期有活动 💤静默: 近3个月无提交")
@@ -1830,8 +1920,8 @@ def main():
         print("7. 搜索负责人任务")
         print("8. 合并指定负责人的所有任务")
         print("9. 检查状态")
-        print("10. 查看分组详细信息")  # 新增
-        print("11. 查看分配原因分析")  # 新增
+        print("10. 查看分组详细信息")
+        print("11. 查看分配原因分析")
         print("12. 完成状态管理 (标记完成/检查远程状态)")
         print("13. 完成最终合并")
         print("0. 退出")
