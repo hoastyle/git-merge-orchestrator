@@ -1,13 +1,14 @@
 """
-Git Merge Orchestrator - 修复后的合并执行器
+Git Merge Orchestrator - Standard合并执行器
 使用真正的三路合并策略，产生标准冲突标记
+适合：需要精确控制合并结果，保证代码质量的场景
 """
 
 from datetime import datetime
 
 
-class MergeExecutor:
-    """修复后的合并执行器 - 真正三路合并版本"""
+class StandardMergeExecutor:
+    """Standard合并执行器 - 真正三路合并版本"""
 
     def __init__(self, git_ops, file_helper):
         self.git_ops = git_ops
@@ -15,7 +16,7 @@ class MergeExecutor:
 
     def analyze_file_modifications(self, files, source_branch, target_branch):
         """分析文件的修改情况，为智能合并策略提供依据"""
-        print("🔍 正在分析文件修改情况...")
+        print("🔍 正在进行Standard模式详细文件分析...")
 
         # 获取merge-base
         merge_base = self.git_ops.get_merge_base(source_branch, target_branch)
@@ -58,11 +59,11 @@ class MergeExecutor:
             "merge_base": merge_base,
         }
 
-        print(f"📊 文件修改分析结果:")
-        print(f"  - 新增文件: {len(missing_files)} 个")
-        print(f"  - 仅源分支修改: {len(modified_only_in_source)} 个")
-        print(f"  - 两边都修改(需要三路合并): {len(modified_in_both)} 个")
-        print(f"  - 无变化: {len(no_changes)} 个")
+        print(f"📊 Standard模式文件修改分析结果:")
+        print(f"  - 新增文件: {len(missing_files)} 个 (直接复制)")
+        print(f"  - 仅源分支修改: {len(modified_only_in_source)} 个 (安全覆盖)")
+        print(f"  - 两边都修改: {len(modified_in_both)} 个 (三路合并，可能产生冲突标记)")
+        print(f"  - 无变化: {len(no_changes)} 个 (跳过)")
 
         return analysis_result
 
@@ -81,10 +82,10 @@ class MergeExecutor:
             "merge_base": None,
         }
 
-    def generate_true_three_way_merge_script(
+    def generate_standard_merge_script(
         self, group_name, assignee, files, branch_name, source_branch, target_branch
     ):
-        """生成真正的三路合并脚本，产生标准冲突标记"""
+        """生成Standard模式合并脚本，产生标准冲突标记"""
 
         # 分析文件修改情况
         analysis = self.analyze_file_modifications(files, source_branch, target_branch)
@@ -97,18 +98,18 @@ class MergeExecutor:
 
         # 生成真正三路合并脚本
         script_content = f"""#!/bin/bash
-# 真正三路合并脚本 - {group_name} (负责人: {assignee})
-# 使用标准Git三路合并，产生标准冲突标记 <<<<<<< ======= >>>>>>>
+# Standard三路合并脚本 - {group_name} (负责人: {assignee})
+# 使用标准Git三路合并，产生标准冲突标记 <<<<<<< HEAD ======= >>>>>>>
 # 文件数: {len(files)} (新增: {len(missing_files)}, 仅源修改: {len(modified_only_in_source)}, 需三路合并: {len(modified_in_both)})
 # 创建时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
 set -e # 遇到错误立即退出
 
-echo "🚀 开始真正三路合并组: {group_name}"
+echo "🚀 开始Standard三路合并组: {group_name}"
 echo "👤 负责人: {assignee}"
 echo "🌿 工作分支: {branch_name}"
 echo "📁 总文件数: {len(files)}"
-echo "📊 文件分类："
+echo "📊 Standard模式文件分类："
 echo "  - 新增文件: {len(missing_files)} 个 (直接复制)"
 echo "  - 仅源分支修改: {len(modified_only_in_source)} 个 (安全覆盖)"
 echo "  - 需要三路合并: {len(modified_in_both)} 个 (使用git merge-file)"
@@ -225,7 +226,7 @@ if [ -n "$MERGE_BASE" ]; then
         total_processed=$((total_processed + 1))
     fi
 else
-    # 没有merge-base，使用两路合并
+    # 没有merge-base，使用两路合并，创建标准冲突标记
     echo "    ⚠️ 无分叉点，使用两路合并策略"
 
     # 创建包含冲突标记的合并结果，使用正确的分支标签
@@ -289,7 +290,7 @@ if [ "$conflicts_found" = true ]; then
     echo " - 推荐安装 GitLens 扩展增强Git功能"
 
 elif [ "$merge_success" = true ]; then
-    echo "✅ 智能三路合并完成! 所有文件均无冲突"
+    echo "✅ Standard三路合并完成! 所有文件均无冲突"
     echo ""
     echo "🎯 后续验证流程："
     echo " 1. 打开VSCode检查修改: code ."
@@ -311,7 +312,7 @@ if [ "$merge_success" = true ]; then
     echo " 3. 运行完整测试套件"
     echo " 4. 添加已验证文件: git add <files...>"
     echo " 5. 检查暂存状态: git status"
-    echo " 6. 提交更改: git commit -m 'Merge group: {group_name} ({len(files)} files) - resolved conflicts'"
+    echo " 6. 提交更改: git commit -m 'Standard merge group: {group_name} ({len(files)} files) - resolved conflicts'"
     echo " 7. 推送分支: git push origin {branch_name}"
     echo ""
     echo "🔄 如需回滚某个文件: git checkout -- <文件名>"
@@ -329,20 +330,22 @@ else
     echo " - 联系该组其他开发成员协助"
     echo " - 在团队群中分享具体错误信息"
     echo " - 考虑将大组拆分为更小的子组处理"
+    echo " - 或者切换到Legacy模式进行快速覆盖"
     exit 1
 fi
 
 echo ""
-echo "💡 三路合并说明："
+echo "💡 Standard三路合并说明："
 echo " - 这是Git的标准合并策略，最安全可靠"
 echo " - 冲突标记是正常现象，表示两个分支对同一处做了不同修改"
 echo " - 手动解决冲突后的代码质量通常比自动合并更高"
 echo " - 解决冲突时要理解业务逻辑，不只是简单选择一边"
+echo " - 如需快速处理，可以切换到Legacy模式: 主菜单选择 16. 选择合并策略"
 """
 
         return script_content
 
-    def generate_batch_true_merge_script(
+    def generate_batch_standard_merge_script(
         self,
         assignee,
         assignee_groups,
@@ -351,7 +354,7 @@ echo " - 解决冲突时要理解业务逻辑，不只是简单选择一边"
         source_branch,
         target_branch,
     ):
-        """生成真正的批量三路合并脚本"""
+        """生成Standard批量三路合并脚本"""
 
         # 分析所有文件的修改情况
         print(f"🔍 正在分析负责人 '{assignee}' 的所有文件...")
@@ -365,7 +368,7 @@ echo " - 解决冲突时要理解业务逻辑，不只是简单选择一边"
         no_changes = analysis["no_changes"]
 
         script_content = f"""#!/bin/bash
-# 真正三路合并批量脚本 - 负责人: {assignee}
+# Standard批量三路合并脚本 - 负责人: {assignee}
 # 使用标准Git三路合并，产生标准冲突标记
 # 组数: {len(assignee_groups)} (文件总数: {len(all_files)})
 # 文件分类: 新增{len(missing_files)}, 仅源修改{len(modified_only_in_source)}, 需三路合并{len(modified_in_both)}
@@ -373,10 +376,10 @@ echo " - 解决冲突时要理解业务逻辑，不只是简单选择一边"
 
 set -e # 遇到错误立即退出
 
-echo "🚀 开始批量真正三路合并负责人 '{assignee}' 的所有任务"
+echo "🚀 开始Standard批量三路合并负责人 '{assignee}' 的所有任务"
 echo "🌿 工作分支: {batch_branch_name}"
 echo "📁 总文件数: {len(all_files)}"
-echo "📊 文件分类："
+echo "📊 Standard模式文件分类："
 echo "  - 新增文件: {len(missing_files)} 个 (直接复制)"
 echo "  - 仅源分支修改: {len(modified_only_in_source)} 个 (安全覆盖)"
 echo "  - 需要三路合并: {len(modified_in_both)} 个 (使用git merge-file)"
@@ -519,7 +522,7 @@ git status --short
 echo ""
 
 if [ "$conflicts_found" = true ]; then
-    echo "⚠️ 批量合并中发现 ${{#conflict_files[@]}} 个冲突文件"
+    echo "⚠️ Standard批量合并中发现 ${{#conflict_files[@]}} 个冲突文件"
     echo ""
     echo "🎯 批量冲突解决策略："
     echo " 1. 打开VSCode: code ."
@@ -539,7 +542,7 @@ if [ "$conflicts_found" = true ]; then
     echo " - 可以分多次提交，每解决一组就提交一次"
 
 elif [ "$merge_success" = true ]; then
-    echo "✅ 批量三路合并完成! 所有 {len(all_files)} 个文件均无冲突"
+    echo "✅ Standard批量三路合并完成! 所有 {len(all_files)} 个文件均无冲突"
     echo ""
     echo "🎯 批量验证流程："
     echo " 1. 打开VSCode检查: code ."
@@ -566,8 +569,8 @@ if [ "$merge_success" = true ]; then
     echo "    b) 全部添加: git add . (需要确保所有修改都正确)"
     echo " 5. 检查暂存状态: git status"
     echo " 6. 提交选择："
-    echo "    a) 分组提交: git commit -m 'Merge group: <组名>'"
-    echo "    b) 统一提交: git commit -m 'Batch merge for {assignee}: {len(assignee_groups)} groups, {len(all_files)} files'"
+    echo "    a) 分组提交: git commit -m 'Standard merge group: <组名>'"
+    echo "    b) 统一提交: git commit -m 'Standard batch merge for {assignee}: {len(assignee_groups)} groups, {len(all_files)} files'"
     echo " 7. 推送分支: git push origin {batch_branch_name}"
     echo ""
     echo "🔄 回滚选项："
@@ -581,6 +584,7 @@ else
     echo " 2. 验证分支完整性: git fsck"
     echo " 3. 检查网络连接状态"
     echo " 4. 考虑分批处理减少复杂度"
+    echo " 5. 或者切换到Legacy模式进行快速覆盖"
     echo ""
     echo "📞 建议求助方式："
     echo " - 在团队群中分享错误日志"
@@ -590,24 +594,24 @@ else
 fi
 
 echo ""
-echo "💡 批量三路合并最佳实践："
+echo "💡 Standard批量三路合并最佳实践："
 echo " - 分批验证比一次性处理更安全"
 echo " - 冲突解决要理解业务逻辑，不只是技术层面"
 echo " - 保持与原代码作者的沟通，特别是复杂冲突"
 echo " - 详细测试合并结果，确保功能完整性"
 echo " - 考虑在合并后创建临时分支备份"
+echo " - 如需加速处理，可以切换到Legacy模式: 主菜单选择 16. 选择合并策略"
 """
 
         return script_content
 
     def merge_group(self, group_name, source_branch, target_branch, integration_branch):
-        """合并指定组的文件 - 使用真正三路合并"""
+        """Standard模式合并指定组"""
         plan = self.file_helper.load_plan()
         if not plan:
             print("❌ 合并计划文件不存在，请先运行创建合并计划")
             return False
 
-        # 找到对应组
         group_info = self.file_helper.find_group_by_name(plan, group_name)
         if not group_info:
             print(f"❌ 未找到组: {group_name}")
@@ -618,17 +622,18 @@ echo " - 考虑在合并后创建临时分支备份"
             print(f"❌ 组 {group_name} 尚未分配负责人")
             return False
 
-        print(f"🎯 准备使用真正三路合并处理组: {group_name}")
+        print(f"🎯 准备使用Standard模式合并组: {group_name}")
         print(f"👤 负责人: {assignee}")
         print(f"📁 文件数: {group_info.get('file_count', len(group_info['files']))}")
+        print(f"💡 Standard模式: 使用Git标准三路合并，产生冲突标记")
 
         # 创建合并分支
         branch_name = self.git_ops.create_merge_branch(
             group_name, assignee, integration_branch
         )
 
-        # 生成真正的三路合并脚本
-        script_content = self.generate_true_three_way_merge_script(
+        # 生成Standard合并脚本
+        script_content = self.generate_standard_merge_script(
             group_name,
             assignee,
             group_info["files"],
@@ -638,10 +643,10 @@ echo " - 考虑在合并后创建临时分支备份"
         )
 
         script_file = self.file_helper.create_script_file(
-            f"merge_{group_name.replace('/', '_')}", script_content
+            f"standard_merge_{group_name.replace('/', '_')}", script_content
         )
 
-        print(f"✅ 已生成真正三路合并脚本: {script_file}")
+        print(f"✅ 已生成Standard三路合并脚本: {script_file}")
         print(f"🎯 请执行: ./{script_file}")
         print(f"💡 该脚本使用Git标准三路合并策略")
         print(f"⚠️ 冲突文件将包含标准冲突标记 <<<<<<< ======= >>>>>>>")
@@ -652,21 +657,21 @@ echo " - 考虑在合并后创建临时分支备份"
     def merge_assignee_tasks(
         self, assignee_name, source_branch, target_branch, integration_branch
     ):
-        """批量合并指定负责人的所有任务 - 使用真正三路合并"""
+        """Standard模式批量合并指定负责人任务"""
         plan = self.file_helper.load_plan()
         if not plan:
             print("❌ 合并计划文件不存在，请先运行创建合并计划")
             return False
 
-        # 找到负责人的所有任务
         assignee_groups = self.file_helper.get_assignee_groups(plan, assignee_name)
         if not assignee_groups:
             print(f"❌ 负责人 '{assignee_name}' 没有分配的任务")
             return False
 
         total_files = sum(g.get("file_count", len(g["files"])) for g in assignee_groups)
-        print(f"🎯 开始批量真正三路合并负责人 '{assignee_name}' 的所有任务...")
+        print(f"🎯 开始Standard批量合并负责人 '{assignee_name}' 的所有任务...")
         print(f"📋 共 {len(assignee_groups)} 个组，总计 {total_files} 个文件")
+        print(f"💡 Standard模式: 使用Git标准三路合并，产生冲突标记")
 
         # 收集所有文件
         all_files = []
@@ -677,13 +682,13 @@ echo " - 考虑在合并后创建临时分支备份"
             print("❌ 没有找到需要合并的文件")
             return False
 
-        # 创建统一的合并分支
+        # 创建批量合并分支
         batch_branch_name = self.git_ops.create_batch_merge_branch(
             assignee_name, integration_branch
         )
 
-        # 生成真正的批量三路合并脚本
-        script_content = self.generate_batch_true_merge_script(
+        # 生成Standard批量合并脚本
+        script_content = self.generate_batch_standard_merge_script(
             assignee_name,
             assignee_groups,
             all_files,
@@ -693,10 +698,10 @@ echo " - 考虑在合并后创建临时分支备份"
         )
 
         script_file = self.file_helper.create_script_file(
-            f"merge_batch_{assignee_name.replace(' ', '_')}", script_content
+            f"standard_merge_batch_{assignee_name.replace(' ', '_')}", script_content
         )
 
-        print(f"✅ 已生成真正的批量三路合并脚本: {script_file}")
+        print(f"✅ 已生成Standard批量三路合并脚本: {script_file}")
         print(f"🎯 请执行: ./{script_file}")
         print(f"💡 该脚本使用Git标准三路合并策略")
         print(f"⚠️ 冲突文件将包含标准冲突标记 <<<<<<< ======= >>>>>>>")
@@ -706,8 +711,8 @@ echo " - 考虑在合并后创建临时分支备份"
         return True
 
     def finalize_merge(self, integration_branch):
-        """完成最终合并 - 保持不变"""
-        print("🎯 开始最终合并...")
+        """Standard模式最终合并"""
+        print("🎯 开始Standard模式最终合并...")
 
         plan = self.file_helper.load_plan()
         if not plan:
@@ -722,7 +727,6 @@ echo " - 考虑在合并后创建临时分支备份"
         for group in plan["groups"]:
             if group["status"] == "completed" and group.get("assignee"):
                 branch_name = f"feat/merge-{group['name'].replace('/', '-')}-{group['assignee'].replace(' ', '-')}"
-                # 检查分支是否存在
                 if self.git_ops.get_branch_exists(branch_name):
                     completed_branches.append((branch_name, group))
 
@@ -753,8 +757,9 @@ echo " - 考虑在合并后创建临时分支备份"
                 all_success = False
 
         if all_success:
-            print("🎉 最终合并完成!")
+            print("🎉 Standard模式最终合并完成!")
             print(f"📋 集成分支 {integration_branch} 已包含所有更改")
+            print(f"💡 所有冲突已通过标准三路合并策略解决")
             print(f"🚀 建议操作:")
             print(f" 1. 验证合并结果: git log --oneline -10")
             print(f" 2. 运行完整测试套件")
