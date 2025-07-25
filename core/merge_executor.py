@@ -429,6 +429,7 @@ echo "⚡ 处理两边都修改的文件 ({len(modified_in_both)}个) - 使用�
                 script_content += f"""
 echo "  三路合并文件: {file}"
 if git checkout --merge {source_branch} -- "{file}" 2>/dev/null; then
+    # 立即将文件从暂存区移到工作区
     git reset HEAD -- "{file}" 2>/dev/null || true
 
     if grep -q "<<<<<<< " "{file}" 2>/dev/null; then
@@ -459,10 +460,9 @@ if [ "$conflicts_found" = true ]; then
     echo "🎯 VSCode批量处理流程："
     echo " 1. 打开VSCode: code ."
     echo " 2. 在Source Control面板查看所有Modified文件"
-    echo " 3. 按组分类处理（文件名前缀可以帮助识别组别）："
-    for group in assignee_groups:
-        echo " 4. 按组处理可以逐个检查，每处理完一组就添加该组的文件"
-        echo " 5. 对于有冲突标记的文件，在VSCode中逐个解决"
+    echo " 3. 按组分类处理（文件名前缀可以帮助识别组别）"
+    echo " 4. 按组处理可以逐个检查，每处理完一组就添加该组的文件"
+    echo " 5. 对于有冲突标记的文件，在VSCode中逐个解决"
     echo " 6. 分批添加已检查的文件: git add <组1的文件...>"
     echo " 7. 继续处理下一组，重复此流程"
     echo ""
