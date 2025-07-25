@@ -27,9 +27,11 @@ class MergeExecutorFactory:
         # 从配置文件读取
         if self.config_file.exists():
             try:
-                with open(self.config_file, 'r', encoding='utf-8') as f:
+                with open(self.config_file, "r", encoding="utf-8") as f:
                     config = json.load(f)
-                    self._current_mode = config.get('merge_strategy', self.STANDARD_MODE)
+                    self._current_mode = config.get(
+                        "merge_strategy", self.STANDARD_MODE
+                    )
             except:
                 self._current_mode = self.STANDARD_MODE
         else:
@@ -47,12 +49,17 @@ class MergeExecutorFactory:
         # 保存到配置文件
         self.config_file.parent.mkdir(exist_ok=True)
         config = {
-            'merge_strategy': mode,
-            'updated_at': Path(__file__).parent.parent.joinpath('utils', 'file_helper.py').stat().st_mtime if Path(__file__).parent.parent.joinpath('utils', 'file_helper.py').exists() else 0
+            "merge_strategy": mode,
+            "updated_at": Path(__file__)
+            .parent.parent.joinpath("utils", "file_helper.py")
+            .stat()
+            .st_mtime
+            if Path(__file__).parent.parent.joinpath("utils", "file_helper.py").exists()
+            else 0,
         }
 
         try:
-            with open(self.config_file, 'w', encoding='utf-8') as f:
+            with open(self.config_file, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"⚠️ 保存合并策略配置失败: {e}")
@@ -63,9 +70,11 @@ class MergeExecutorFactory:
 
         if mode == self.LEGACY_MODE:
             from core.legacy_merge_executor import LegacyMergeExecutor
+
             return LegacyMergeExecutor(git_ops, file_helper)
         else:
             from core.standard_merge_executor import StandardMergeExecutor
+
             return StandardMergeExecutor(git_ops, file_helper)
 
     def get_mode_description(self, mode=None):
@@ -75,19 +84,19 @@ class MergeExecutorFactory:
 
         descriptions = {
             self.LEGACY_MODE: {
-                'name': 'Legacy模式',
-                'description': '快速覆盖策略，直接使用源分支内容覆盖目标分支',
-                'pros': ['速度快', '操作简单', '适合信任源分支的场景'],
-                'cons': ['无冲突标记', '无法手动解决冲突', '可能丢失目标分支修改'],
-                'suitable': '适合：确定源分支内容正确，不需要精细控制的场景'
+                "name": "Legacy模式",
+                "description": "快速覆盖策略，直接使用源分支内容覆盖目标分支",
+                "pros": ["速度快", "操作简单", "适合信任源分支的场景"],
+                "cons": ["无冲突标记", "无法手动解决冲突", "可能丢失目标分支修改"],
+                "suitable": "适合：确定源分支内容正确，不需要精细控制的场景",
             },
             self.STANDARD_MODE: {
-                'name': 'Standard模式',
-                'description': '标准Git三路合并，产生标准冲突标记',
-                'pros': ['标准Git流程', '产生冲突标记', '支持手动解决冲突', '更安全'],
-                'cons': ['需要手动处理冲突', '操作稍复杂'],
-                'suitable': '适合：需要精确控制合并结果，保证代码质量的场景'
-            }
+                "name": "Standard模式",
+                "description": "标准Git三路合并，产生标准冲突标记",
+                "pros": ["标准Git流程", "产生冲突标记", "支持手动解决冲突", "更安全"],
+                "cons": ["需要手动处理冲突", "操作稍复杂"],
+                "suitable": "适合：需要精确控制合并结果，保证代码质量的场景",
+            },
         }
 
         return descriptions.get(mode, {})
@@ -95,14 +104,11 @@ class MergeExecutorFactory:
     def list_available_modes(self):
         """列出所有可用模式"""
         return [
+            {"mode": self.LEGACY_MODE, **self.get_mode_description(self.LEGACY_MODE)},
             {
-                'mode': self.LEGACY_MODE,
-                **self.get_mode_description(self.LEGACY_MODE)
+                "mode": self.STANDARD_MODE,
+                **self.get_mode_description(self.STANDARD_MODE),
             },
-            {
-                'mode': self.STANDARD_MODE,
-                **self.get_mode_description(self.STANDARD_MODE)
-            }
         ]
 
     def switch_mode_interactive(self):
@@ -114,7 +120,7 @@ class MergeExecutorFactory:
         print("=" * 80)
 
         for i, mode_info in enumerate(modes, 1):
-            current_indicator = " ← 当前模式" if mode_info['mode'] == current_mode else ""
+            current_indicator = " ← 当前模式" if mode_info["mode"] == current_mode else ""
             print(f"{i}. {mode_info['name']}{current_indicator}")
             print(f"   描述: {mode_info['description']}")
             print(f"   优点: {', '.join(mode_info['pros'])}")
@@ -127,7 +133,7 @@ class MergeExecutorFactory:
             choice_idx = int(choice) - 1
 
             if 0 <= choice_idx < len(modes):
-                selected_mode = modes[choice_idx]['mode']
+                selected_mode = modes[choice_idx]["mode"]
                 if selected_mode == current_mode:
                     print(f"✅ 已经是 {modes[choice_idx]['name']} 模式")
                 else:
@@ -149,9 +155,9 @@ class MergeExecutorFactory:
         mode_info = self.get_mode_description(mode)
 
         return {
-            'current_mode': mode,
-            'mode_name': mode_info.get('name', 'Unknown'),
-            'description': mode_info.get('description', ''),
-            'config_file': str(self.config_file),
-            'config_exists': self.config_file.exists()
+            "current_mode": mode,
+            "mode_name": mode_info.get("name", "Unknown"),
+            "description": mode_info.get("description", ""),
+            "config_file": str(self.config_file),
+            "config_exists": self.config_file.exists(),
         }

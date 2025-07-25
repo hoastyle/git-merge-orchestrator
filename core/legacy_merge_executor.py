@@ -1,323 +1,58 @@
-"""
-Git Merge Orchestrator - 合并执行器 (工作区优先版)
-负责生成改进的合并脚本和执行合并操作
-使用真正的三路合并策略，所有结果保留在工作区，便于VSCode手动检查
-"""
-
-from datetime import datetime
+from .base_merge_executor import BaseMergeExecutor, MergeStrategy
 
 
-class LegacyMergeExecutor:
-    """合并执行器 - 工作区优先策略版本"""
+class LegacyMergeExecutor(BaseMergeExecutor):
+    """Legacy合并执行器 - 快速覆盖策略"""
 
     def __init__(self, git_ops, file_helper):
-        self.git_ops = git_ops
-        self.file_helper = file_helper
+        super().__init__(git_ops, file_helper, MergeStrategy.LEGACY)
 
-    def analyze_file_modifications(self, files, source_branch, target_branch):
-        """分析文件的修改情况，为智能合并策略提供依据"""
-        print("🔍 正在分析文件修改情况...")
+    def get_strategy_name(self):
+        return "Legacy"
 
-        # 获取merge-base
-        merge_base = self.git_ops.get_merge_base(source_branch, target_branch)
-        if not merge_base:
-            print("⚠️ 无法确定分叉点，使用简化分析策略")
-            return self._simple_file_analysis(files, source_branch, target_branch)
+    def get_strategy_description(self):
+        return "快速覆盖策略，源分支内容直接覆盖目标分支，无冲突标记"
 
-        existing_files, missing_files = self.git_ops.check_file_existence(
-            files, target_branch
-        )
-
-        # 详细分析已存在文件的修改情况
-        modified_in_both = []
-        modified_only_in_source = []
-        no_changes = []
-
-        for file in existing_files:
-            # 检查源分支相对于merge-base是否有修改
-            source_cmd = f'git diff --quiet {merge_base} {source_branch} -- "{file}"'
-            source_result = self.git_ops.run_command_silent(source_cmd)
-            source_modified = source_result is None  # None表示有差异（非零退出码）
-
-            # 检查目标分支相对于merge-base是否有修改
-            target_cmd = f'git diff --quiet {merge_base} {target_branch} -- "{file}"'
-            target_result = self.git_ops.run_command_silent(target_cmd)
-            target_modified = target_result is None  # None表示有差异（非零退出码）
-
-            if source_modified and target_modified:
-                modified_in_both.append(file)
-            elif source_modified and not target_modified:
-                modified_only_in_source.append(file)
-            elif not source_modified and not target_modified:
-                no_changes.append(file)
-
-        analysis_result = {
-            "missing_files": missing_files,
-            "modified_only_in_source": modified_only_in_source,
-            "modified_in_both": modified_in_both,
-            "no_changes": no_changes,
-            "merge_base": merge_base,
-        }
-
-        print(f"📊 文件修改分析结果:")
-        print(f"  - 新增文件: {len(missing_files)} 个")
-        print(f"  - 仅源分支修改: {len(modified_only_in_source)} 个")
-        print(f"  - 两边都修改: {len(modified_in_both)} 个")
-        print(f"  - 无变化: {len(no_changes)} 个")
-
-        return analysis_result
-
-    def _simple_file_analysis(self, files, source_branch, target_branch):
-        """简化的文件分析策略（当无法确定merge-base时）"""
-        existing_files, missing_files = self.git_ops.check_file_existence(
-            files, target_branch
-        )
-
-        # 简化策略：假设所有已存在文件都可能有冲突
-        return {
-            "missing_files": missing_files,
-            "modified_only_in_source": [],
-            "modified_in_both": existing_files,  # 保守策略：都当作可能冲突处理
-            "no_changes": [],
-            "merge_base": None,
-        }
-
-    def generate_smart_merge_script(
+    def generate_merge_script(
         self, group_name, assignee, files, branch_name, source_branch, target_branch
     ):
-        """生成工作区优先的智能合并脚本，使用真正的三路合并策略"""
-
+        """生成Legacy合并脚本"""
         # 分析文件修改情况
         analysis = self.analyze_file_modifications(files, source_branch, target_branch)
 
-        missing_files = analysis["missing_files"]
-        modified_only_in_source = analysis["modified_only_in_source"]
-        modified_in_both = analysis["modified_in_both"]
-        no_changes = analysis["no_changes"]
-        merge_base = analysis["merge_base"]
+        # 生成脚本头部
+        script_content = self._generate_common_script_header(
+            group_name, assignee, files, branch_name
+        )
 
-        # 生成工作区优先的处理脚本
-        script_content = f"""#!/bin/bash
-# 工作区优先智能合并脚本 - {group_name} (负责人: {assignee})
-# 使用三路合并策略，所有结果保留在工作区，便于VSCode手动检查
-# 文件数: {len(files)} (新增: {len(missing_files)}, 仅源修改: {len(modified_only_in_source)}, 两边修改: {len(modified_in_both)})
-# 创建时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+        # 添加merge-base检测
+        script_content += self._generate_merge_base_section(
+            source_branch, target_branch
+        )
 
-set -e # 遇到错误立即退出
-
-echo "🚀 开始工作区优先智能合并组: {group_name}"
-echo "👤 负责人: {assignee}"
-echo "🌿 工作分支: {branch_name}"
-echo "📁 总文件数: {len(files)}"
-echo "📊 文件分类："
-echo "  - 新增文件: {len(missing_files)} 个"
-echo "  - 仅源分支修改: {len(modified_only_in_source)} 个"
-echo "  - 两边都修改: {len(modified_in_both)} 个"
-echo "  - 无变化: {len(no_changes)} 个"
-echo ""
-echo "💡 策略说明：所有修改保留在工作区，便于VSCode检查后手动添加"
-echo ""
-
-# 切换到工作分支
-echo "📋 切换到工作分支..."
-git checkout {branch_name}
-"""
-
-        # 添加merge-base信息
-        if merge_base:
-            script_content += f"""
-# 获取merge-base用于三路合并
-MERGE_BASE="{merge_base}"
-echo "🔍 分叉点: $MERGE_BASE"
-echo ""
-"""
-        else:
-            script_content += f"""
-# 尝试获取merge-base
-MERGE_BASE=$(git merge-base {source_branch} {target_branch} 2>/dev/null || echo "")
-if [ -n "$MERGE_BASE" ]; then
-    echo "🔍 分叉点: $MERGE_BASE"
-else
-    echo "⚠️ 无法确定分叉点，将使用保守的合并策略"
-fi
-echo ""
-"""
-
+        # 添加变量初始化
         script_content += """
 merge_success=true
 conflicts_found=false
+total_processed=0
 
-echo "🔄 开始三路合并到工作区..."
+echo "🔄 开始Legacy快速覆盖处理..."
 """
 
-        # 处理新增文件
-        if missing_files:
-            script_content += f"""
-echo "🆕 处理新增文件 ({len(missing_files)}个)..."
-"""
-            for file in missing_files:
-                script_content += f"""
-echo "  处理新文件: {file}"
-# 创建目录结构
-mkdir -p "$(dirname "{file}")"
-# 从源分支复制文件内容到工作区
-if git show {source_branch}:"{file}" > "{file}" 2>/dev/null; then
-    echo "    ✅ 新文件 {file} 已写入工作区"
-else
-    echo "    ❌ 无法从源分支获取文件: {file}"
-    merge_success=false
-fi
-"""
+        # 添加公共文件处理部分
+        script_content += self._generate_common_file_processing_sections(
+            analysis, source_branch
+        )
 
-        # 处理仅源分支修改的文件
-        if modified_only_in_source:
-            script_content += f"""
-echo "📝 处理仅源分支修改的文件 ({len(modified_only_in_source)}个)..."
-"""
-            for file in modified_only_in_source:
-                script_content += f"""
-echo "  获取文件: {file} (仅源分支有修改，安全覆盖)"
-if git show {source_branch}:"{file}" > "{file}" 2>/dev/null; then
-    echo "    ✅ 文件 {file} 已更新到工作区"
-else
-    echo "    ❌ 无法从源分支获取文件: {file}"
-    merge_success=false
-fi
-"""
+        # Legacy特定的冲突文件处理
+        script_content += self._generate_strategy_specific_merge_logic(
+            analysis, source_branch, target_branch
+        )
 
-        # 处理两边都修改的文件
-        if modified_in_both:
-            script_content += f"""
-echo "⚡ 处理两边都修改的文件 ({len(modified_in_both)}个) - 使用三路合并..."
-"""
-            for file in modified_in_both:
-                script_content += f"""
-echo "  三路合并文件: {file}"
-
-# 使用三路合并但保持结果在工作区
-if git checkout --merge {source_branch} -- "{file}" 2>/dev/null; then
-    # 立即将文件从暂存区移到工作区
-    git reset HEAD -- "{file}" 2>/dev/null || true
-
-    # 检查是否有冲突标记
-    if grep -q "<<<<<<< " "{file}" 2>/dev/null; then
-        echo "    ⚠️ 文件 {file} 存在合并冲突，已在工作区标记"
-        conflicts_found=true
-        echo "    💡 冲突标记说明："
-        echo "       <<<<<<< HEAD     (当前分支的内容)"
-        echo "       =======          (分隔线)"
-        echo "       >>>>>>> {source_branch}  (源分支的内容)"
-        echo "    📝 请在VSCode中编辑解决冲突"
-    else
-        echo "    ✅ 文件 {file} 自动合并成功，已在工作区"
-    fi
-else
-    echo "    ⚠️ 文件 {file} 自动合并失败，创建手动合并参考文件"
-
-    # 创建参考文件用于手动合并
-    if [ -n "$MERGE_BASE" ]; then
-        git show $MERGE_BASE:"{file}" > "{file}.base" 2>/dev/null || echo "# 分叉点版本（文件可能不存在）" > "{file}.base"
-    else
-        echo "# 无法获取分叉点版本" > "{file}.base"
-    fi
-
-    git show {target_branch}:"{file}" > "{file}.target" 2>/dev/null || cp "{file}" "{file}.target"
-    git show {source_branch}:"{file}" > "{file}.source" 2>/dev/null || echo "# 无法获取源分支版本" > "{file}.source"
-
-    echo "    📁 已创建合并参考文件："
-    echo "       - {file}.base   (分叉点版本)"
-    echo "       - {file}.target (目标分支版本)"
-    echo "       - {file}.source (源分支版本)"
-    echo "    📝 请参考这些文件在VSCode中手动合并"
-
-    conflicts_found=true
-fi
-"""
-
-        # 处理无变化的文件
-        if no_changes:
-            script_content += f"""
-echo "📋 跳过无变化的文件 ({len(no_changes)}个)..."
-"""
-            for file in no_changes:
-                script_content += f'echo "  跳过: {file} (两个分支中内容相同)"\n'
-
-        # 添加最终处理逻辑 - 工作区优先
-        script_content += f"""
-echo ""
-
-# 显示工作区状态
-echo "📊 当前工作区状态："
-git status --short
-
-echo ""
-
-if [ "$conflicts_found" = true ]; then
-    echo "⚠️ 发现合并冲突或需要手动处理的文件"
-    echo ""
-    echo "🎯 VSCode工作流程："
-    echo " 1. 打开VSCode: code ."
-    echo " 2. 查看Source Control面板，检查Modified文件"
-    echo " 3. 逐个文件检查差异，解决冲突标记 (<<<<<<< ======= >>>>>>>)"
-    echo " 4. 对于有.base/.target/.source参考文件的，参考进行手动合并"
-    echo " 5. 检查完毕后删除临时参考文件: rm *.base *.target *.source"
-    echo ""
-    echo "📝 分阶段添加建议："
-    echo " - 先添加简单无冲突文件: git add <简单文件>"
-    echo " - 再逐个添加已解决冲突的文件: git add <已解决文件>"
-    echo " - 检查暂存区状态: git status"
-
-elif [ "$merge_success" = true ]; then
-    echo "✅ 智能三路合并完成! 所有文件已在工作区"
-    echo ""
-    echo "🎯 VSCode检查流程："
-    echo " 1. 打开VSCode: code ."
-    echo " 2. 在Source Control面板查看所有Modified文件"
-    echo " 3. 逐个文件review差异，确认修改正确"
-    echo " 4. 满意的文件点击+号添加到暂存区"
-    echo " 5. 或者使用命令批量添加: git add <文件列表>"
-
-else
-    echo "❌ 合并过程中出现问题"
-    merge_success=false
-fi
-
-if [ "$merge_success" = true ]; then
-    echo ""
-    echo "⏭️ 推荐后续操作："
-    echo " 1. VSCode检查: code ."
-    echo " 2. 检查差异: git diff"
-    echo " 3. 分批添加: git add <文件1> <文件2> ..."
-    echo " 4. 检查暂存: git status"
-    echo " 5. 运行测试: npm test 或 python -m pytest 等"
-    echo " 6. 提交更改: git commit -m 'Merge group: {group_name} ({len(files)} files)'"
-    echo " 7. 推送分支: git push origin {branch_name}"
-    echo ""
-    echo "🔄 如需重置: git checkout -- <文件名> 或 git reset --hard HEAD"
-
-else
-    echo ""
-    echo "⏳ 需要手动处理问题后再继续"
-    echo ""
-    echo "📊 当前状态:"
-    git status
-    echo ""
-    echo "🔄 处理完问题后的步骤："
-    echo " 1. 解决所有问题"
-    echo " 2. VSCode检查: code ."
-    echo " 3. 确认修改: git status"
-    echo " 4. 分批添加: git add <files>"
-    echo " 5. 运行测试验证"
-    echo " 6. 提交: git commit -m 'Merge group: {group_name} (resolved issues)'"
-    echo " 7. 推送: git push origin {branch_name}"
-fi
-
-echo ""
-echo "💡 小贴士："
-echo " - 使用 'git diff' 查看工作区所有变更"
-echo " - 使用 'git diff <文件名>' 查看特定文件变更"
-echo " - 在VSCode中可以使用GitLens扩展获得更好的diff体验"
-"""
+        # 添加通用结尾
+        script_content += self._generate_common_script_footer(
+            group_name, len(files), branch_name
+        )
 
         return script_content
 
@@ -330,367 +65,412 @@ echo " - 在VSCode中可以使用GitLens扩展获得更好的diff体验"
         source_branch,
         target_branch,
     ):
-        """生成工作区优先的批量合并脚本"""
-
-        # 分析所有文件的修改情况
-        print(f"🔍 正在分析负责人 '{assignee}' 的所有文件...")
+        """生成Legacy批量合并脚本"""
         analysis = self.analyze_file_modifications(
             all_files, source_branch, target_branch
         )
 
-        missing_files = analysis["missing_files"]
-        modified_only_in_source = analysis["modified_only_in_source"]
-        modified_in_both = analysis["modified_in_both"]
-        no_changes = analysis["no_changes"]
+        script_content = self._generate_common_script_header(
+            f"batch-{assignee}", assignee, all_files, batch_branch_name, "批量"
+        )
 
-        script_content = f"""#!/bin/bash
-# 工作区优先批量智能合并脚本 - 负责人: {assignee}
-# 使用三路合并策略，所有结果保留在工作区，便于VSCode批量检查
-# 组数: {len(assignee_groups)} (文件总数: {len(all_files)})
-# 文件分类: 新增{len(missing_files)}, 仅源修改{len(modified_only_in_source)}, 两边修改{len(modified_in_both)}
-# 创建时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+        script_content += self._generate_merge_base_section(
+            source_branch, target_branch
+        )
 
-set -e # 遇到错误立即退出
-
-echo "🚀 开始批量智能合并负责人 '{assignee}' 的所有任务"
-echo "🌿 工作分支: {batch_branch_name}"
-echo "📁 总文件数: {len(all_files)}"
-echo "📊 文件分类："
-echo "  - 新增文件: {len(missing_files)} 个"
-echo "  - 仅源分支修改: {len(modified_only_in_source)} 个"
-echo "  - 两边都修改: {len(modified_in_both)} 个"
-echo "  - 无变化: {len(no_changes)} 个"
-echo "📋 包含组: {', '.join([g['name'] for g in assignee_groups])}"
-echo ""
-echo "💡 策略说明：所有修改保留在工作区，便于VSCode批量检查后分阶段添加"
-echo ""
-
-# 切换到工作分支
-echo "📋 切换到工作分支..."
-git checkout {batch_branch_name}
-
-# 获取merge-base
-MERGE_BASE=$(git merge-base {source_branch} {target_branch} 2>/dev/null || echo "")
-if [ -n "$MERGE_BASE" ]; then
-    echo "🔍 分叉点: $MERGE_BASE"
-else
-    echo "⚠️ 无法确定分叉点，将使用保守的合并策略"
-fi
-
+        # 添加组别详情
+        script_content += f"""
 echo "📄 组别详情:"
 {chr(10).join([f'echo "  组 {g["name"]}: {g.get("file_count", len(g["files"]))} 个文件"' for g in assignee_groups])}
 echo ""
 
 merge_success=true
 conflicts_found=false
+total_processed=0
 
-echo "🔄 开始批量智能三路合并到工作区..."
+echo "🔄 开始Legacy批量快速覆盖处理..."
 """
 
-        # 处理新增文件
-        if missing_files:
-            script_content += f"""
-echo "🆕 处理新增文件 ({len(missing_files)}个)..."
+        script_content += self._generate_common_file_processing_sections(
+            analysis, source_branch
+        )
+        script_content += self._generate_strategy_specific_merge_logic(
+            analysis, source_branch, target_branch
+        )
+        script_content += self._generate_common_batch_script_footer(
+            assignee, len(assignee_groups), len(all_files), batch_branch_name
+        )
+
+        return script_content
+
+    def _generate_strategy_specific_merge_logic(
+        self, analysis, source_branch, target_branch
+    ):
+        """生成Legacy特定的合并逻辑 - 直接覆盖冲突文件"""
+        modified_in_both = analysis["modified_in_both"]
+
+        if not modified_in_both:
+            return ""
+
+        script_logic = f"""
+echo ""
+echo "⚡ 处理两边都修改的文件 ({len(modified_in_both)}个) - Legacy快速覆盖..."
 """
-            for file in missing_files:
-                script_content += f"""
-echo "  处理新文件: {file}"
-mkdir -p "$(dirname "{file}")"
+
+        for file in modified_in_both:
+            script_logic += f"""
+echo "  [快速覆盖] {file}"
 if git show {source_branch}:"{file}" > "{file}" 2>/dev/null; then
-    echo "    ✅ 新文件 {file} 已写入工作区"
+    echo "    ✅ Legacy快速覆盖完成（源分支版本优先）"
+    total_processed=$((total_processed + 1))
 else
     echo "    ❌ 无法从源分支获取文件: {file}"
     merge_success=false
 fi
 """
 
-        # 处理仅源分支修改的文件
-        if modified_only_in_source:
-            script_content += f"""
-echo "📝 处理仅源分支修改的文件 ({len(modified_only_in_source)}个)..."
-"""
-            for file in modified_only_in_source:
-                script_content += f"""
-echo "  获取文件: {file}"
-if git show {source_branch}:"{file}" > "{file}" 2>/dev/null; then
-    echo "    ✅ 文件 {file} 已更新到工作区"
-else
-    echo "    ❌ 无法从源分支获取文件: {file}"
-    merge_success=false
-fi
-"""
+        return script_logic
 
-        # 处理两边都修改的文件
+    def _print_analysis_result(self, analysis_result):
+        """Legacy特定的分析结果显示"""
+        super()._print_analysis_result(analysis_result)
+        modified_in_both = analysis_result["modified_in_both"]
         if modified_in_both:
-            script_content += f"""
-echo "⚡ 处理两边都修改的文件 ({len(modified_in_both)}个) - 使用三路合并..."
-"""
-            for file in modified_in_both:
-                script_content += f"""
-echo "  三路合并文件: {file}"
-if git checkout --merge {source_branch} -- "{file}" 2>/dev/null; then
-    # 立即将文件从暂存区移到工作区
-    git reset HEAD -- "{file}" 2>/dev/null || true
+            print(f"  💡 其中 {len(modified_in_both)} 个文件将使用源分支版本快速覆盖")
 
-    if grep -q "<<<<<<< " "{file}" 2>/dev/null; then
-        echo "    ⚠️ 文件 {file} 存在合并冲突，已在工作区标记"
-        conflicts_found=true
-    else
-        echo "    ✅ 文件 {file} 自动合并成功，已在工作区"
-    fi
+    def _print_script_completion_message(self, script_file):
+        """Legacy特定的完成消息"""
+        super()._print_script_completion_message(script_file)
+        print(f"💡 Legacy模式: 使用快速覆盖策略，无冲突标记")
+        print(f"📝 适合: 确定源分支内容正确的场景")
+        print(f"⚡ 优势: 执行速度快，操作简单")
+
+    def _print_batch_script_completion_message(self, script_file):
+        """Legacy特定的批量完成消息"""
+        super()._print_batch_script_completion_message(script_file)
+        print(f"💡 Legacy批量模式: 所有冲突文件使用源分支版本覆盖")
+        print(f"📝 建议: 执行前确认源分支内容的正确性")
+        print(f"⚡ 适合: 热修复、紧急发布等快速合并场景")
+
+    def _get_strategy_footer_notes(self):
+        """Legacy策略特定的脚本结尾说明"""
+        return """echo " - 这是快速覆盖策略，冲突文件直接使用源分支版本"
+echo " - 适合确定源分支内容正确的场景"
+echo " - 执行速度快，但需要人工验证合并结果"
+echo " - 如需精确控制，可切换到Standard模式"
+"""
+
+    def _get_batch_strategy_footer_notes(self):
+        """Legacy批量策略特定的脚本结尾说明"""
+        return """echo " - 批量快速覆盖比手动解决冲突更高效"
+echo " - 适合小团队或高信任度的项目"
+echo " - 建议在合并后运行完整测试套件"
+echo " - 如发现问题，可以使用git reset回滚后重新处理"
+"""
+
+
+class StandardMergeExecutor(BaseMergeExecutor):
+    """Standard合并执行器 - 三路合并策略"""
+
+    def __init__(self, git_ops, file_helper):
+        super().__init__(git_ops, file_helper, MergeStrategy.STANDARD)
+
+    def get_strategy_name(self):
+        return "Standard"
+
+    def get_strategy_description(self):
+        return "标准Git三路合并，产生冲突标记 <<<<<<< ======= >>>>>>>"
+
+    def generate_merge_script(
+        self, group_name, assignee, files, branch_name, source_branch, target_branch
+    ):
+        """生成Standard合并脚本"""
+        analysis = self.analyze_file_modifications(files, source_branch, target_branch)
+
+        script_content = self._generate_common_script_header(
+            group_name, assignee, files, branch_name
+        )
+
+        script_content += self._generate_merge_base_section(
+            source_branch, target_branch
+        )
+
+        script_content += f"""
+merge_success=true
+conflicts_found=false
+total_processed=0
+conflict_files=()
+
+echo "🔄 开始Standard三路合并处理..."
+echo "💡 重要说明：三路合并将产生标准冲突标记"
+echo "   <<<<<<< HEAD       (当前分支内容)"
+echo "   ======="
+echo "   >>>>>>> {source_branch}  (源分支内容)"
+echo ""
+"""
+
+        script_content += self._generate_common_file_processing_sections(
+            analysis, source_branch
+        )
+        script_content += self._generate_strategy_specific_merge_logic(
+            analysis, source_branch, target_branch
+        )
+
+        # Standard特定的冲突处理说明
+        script_content += """
+echo ""
+if [ "$conflicts_found" = true ]; then
+    echo "⚠️ 发现需要手动解决的冲突"
+    echo ""
+    echo "🎯 标准冲突解决流程："
+    echo " 1. 打开VSCode: code ."
+    echo " 2. 在Source Control面板查看Modified文件"
+    echo " 3. 对于包含冲突标记的文件："
+    echo "    - 查找 <<<<<<< HEAD 标记"
+    echo "    - HEAD后面是当前分支的内容"
+    echo "    - ======= 是分隔线"
+    echo "    - >>>>>>> 前面是源分支的内容"
+    echo " 4. 手动编辑，删除冲突标记，保留最终想要的内容"
+    echo " 5. 保存文件后，在VSCode中点击+号添加到暂存区"
+    echo ""
+    echo "💡 VSCode冲突解决技巧："
+    echo " - 使用内置的merge editor获得更好体验"
+    echo " - 可以点击 'Accept Current Change' 或 'Accept Incoming Change'"
+    echo " - 也可以点击 'Accept Both Changes' 然后手动调整"
+elif [ "$merge_success" = true ]; then
+    echo "✅ Standard三路合并完成! 所有文件均无冲突"
+    echo ""
+    echo "🎯 后续验证流程："
+    echo " 1. 打开VSCode检查修改: code ."
+    echo " 2. 在Source Control面板review所有变更"
+    echo " 3. 运行测试验证合并结果"
+    echo " 4. 如果测试通过，批量添加文件: git add ."
 else
-    echo "    ⚠️ 文件 {file} 需要手动处理，已在工作区"
-    conflicts_found=true
+    echo "❌ 合并过程中出现严重错误"
+    merge_success=false
 fi
 """
 
-        # 添加批量处理的最终逻辑 - 工作区优先
+        script_content += self._generate_common_script_footer(
+            group_name, len(files), branch_name
+        )
+
+        return script_content
+
+    def generate_batch_merge_script(
+        self,
+        assignee,
+        assignee_groups,
+        all_files,
+        batch_branch_name,
+        source_branch,
+        target_branch,
+    ):
+        """生成Standard批量合并脚本"""
+        analysis = self.analyze_file_modifications(
+            all_files, source_branch, target_branch
+        )
+
+        script_content = self._generate_common_script_header(
+            f"batch-{assignee}", assignee, all_files, batch_branch_name, "批量"
+        )
+
+        script_content += self._generate_merge_base_section(
+            source_branch, target_branch
+        )
+
         script_content += f"""
+echo "📄 组别详情:"
+{chr(10).join([f'echo "  组 {g["name"]}: {g.get("file_count", len(g["files"]))} 个文件"' for g in assignee_groups])}
 echo ""
 
-# 显示工作区状态
-echo "📊 当前工作区状态："
-git status --short
+merge_success=true
+conflicts_found=false
+total_processed=0
+conflict_files=()
+
+echo "🔄 开始Standard批量三路合并..."
+echo "💡 重要说明：对于冲突文件将产生标准冲突标记"
+echo "   <<<<<<< HEAD       (当前分支内容)"
+echo "   ======="
+echo "   >>>>>>> {source_branch}  (源分支内容)"
+echo ""
+"""
+
+        script_content += self._generate_common_file_processing_sections(
+            analysis, source_branch
+        )
+        script_content += self._generate_strategy_specific_merge_logic(
+            analysis, source_branch, target_branch
+        )
+
+        # Standard批量特定的冲突处理说明
+        script_content += """
+echo ""
+if [ "${#conflict_files[@]}" -gt 0 ]; then
+    echo "⚠️ 以下文件包含冲突标记，需要手动解决："
+    for file in "${conflict_files[@]}"; do
+        echo "  - $file"
+    done
+fi
 
 echo ""
 
 if [ "$conflicts_found" = true ]; then
-    echo "⚠️ 批量合并中发现冲突，所有结果已在工作区"
+    echo "⚠️ Standard批量合并中发现冲突文件"
     echo ""
-    echo "🎯 VSCode批量处理流程："
+    echo "🎯 批量冲突解决策略："
     echo " 1. 打开VSCode: code ."
     echo " 2. 在Source Control面板查看所有Modified文件"
-    echo " 3. 按组分类处理（文件名前缀可以帮助识别组别）"
-    echo " 4. 按组处理可以逐个检查，每处理完一组就添加该组的文件"
-    echo " 5. 对于有冲突标记的文件，在VSCode中逐个解决"
-    echo " 6. 分批添加已检查的文件: git add <组1的文件...>"
-    echo " 7. 继续处理下一组，重复此流程"
+    echo " 3. 优先处理无冲突文件（没有 <<<<<<< 标记的）"
+    echo " 4. 将无冲突文件分批添加到暂存区"
+    echo " 5. 逐个处理冲突文件："
+    echo "    - 搜索 <<<<<<< HEAD 找到冲突位置"
+    echo "    - 理解 ======= 上下两部分的区别"
+    echo "    - 手动编辑保留正确内容，删除冲突标记"
+    echo "    - 处理完一个文件就添加: git add <已解决文件>"
+    echo " 6. 所有文件处理完后提交"
     echo ""
     echo "💡 批量处理建议："
-    echo " - 按组分批处理，每个组的文件通常相关性较强"
-    echo " - 优先处理无冲突的文件，建立信心"
-    echo " - 复杂冲突可以联系该组的其他开发者协助"
-    echo " - 使用VSCode的diff视图逐个对比修改"
-
+    echo " - 按组分批处理，每个组的文件相关性较强"
+    echo " - 复杂冲突可以创建issue联系原作者"
+    echo " - 可以分多次提交，每解决一组就提交一次"
 elif [ "$merge_success" = true ]; then
-    echo "✅ 批量智能合并完成! 所有文件已在工作区"
+    echo "✅ Standard批量三路合并完成! 所有文件均无冲突"
     echo ""
-    echo "🎯 VSCode批量检查流程："
-    echo " 1. 打开VSCode: code ."
-    echo " 2. 在Source Control面板查看所有 {len(all_files)} 个Modified文件"
-    echo " 3. 建议按组分批检查和添加："
-{chr(10).join([f'    echo "    - 组 {g["name"]}: {g.get("file_count", len(g["files"]))} 个文件"' for g in assignee_groups])}
-    echo " 4. 每检查完一组，就添加该组: git add <该组文件列表>"
-    echo " 5. 定期检查暂存状态: git status"
-
+    echo "🎯 批量验证流程："
+    echo " 1. 打开VSCode检查: code ."
+    echo " 2. 在Source Control面板review所有变更"
+    echo " 3. 按组检查修改内容"
+    echo " 4. 运行完整测试套件验证合并结果"
+    echo " 5. 如果测试通过，可以批量添加: git add ."
+    echo " 6. 或者按组分批添加便于管理"
 else
-    echo "❌ 批量合并过程中出现问题"
+    echo "❌ 批量合并过程中出现严重错误"
     merge_success=false
 fi
-
-if [ "$merge_success" = true ]; then
-    echo ""
-    echo "⏭️ 推荐批量后续操作："
-    echo " 1. VSCode检查: code ."
-    echo " 2. 查看所有变更: git diff"
-    echo " 3. 按组分批添加文件（建议每组单独添加便于回滚）"
-    echo " 4. 例如: git add {' '.join(assignee_groups[0]['files'][:3]) if assignee_groups else 'file1 file2 ...'}"
-    echo " 5. 检查暂存: git status"
-    echo " 6. 运行测试: npm test 或 python -m pytest 等"
-    echo " 7. 可以分批提交: git commit -m 'Merge group: <组名>'"
-    echo " 8. 或者最后统一提交: git commit -m 'Batch merge for {assignee}: {len(assignee_groups)} groups'"
-    echo " 9. 推送分支: git push origin {batch_branch_name}"
-    echo ""
-    echo "🔄 如需重置某个文件: git checkout -- <文件名>"
-    echo "🔄 如需重置所有: git reset --hard HEAD"
-
-else
-    echo ""
-    echo "⏳ 需要处理问题后再继续"
-    echo ""
-    echo "📊 当前状态:"
-    git status
-    echo ""
-    echo "🛠️ 后续步骤："
-    echo " 1. 解决所有问题"
-    echo " 2. VSCode检查: code ."
-    echo " 3. 确认修改: git status"
-    echo " 4. 按组分批添加: git add <组文件>"
-    echo " 5. 运行测试验证"
-    echo " 6. 提交: git commit -m 'Batch merge for {assignee} (resolved issues)'"
-    echo " 7. 推送: git push origin {batch_branch_name}"
-    echo ""
-    echo "💡 提示: 如果文件太多，建议拆分为更小的组单独处理"
-fi
-
-echo ""
-echo "💡 批量处理小贴士："
-echo " - 使用 'git diff --name-only' 查看所有变更文件列表"
-echo " - 使用 'git diff <组的文件...>' 查看特定组的变更"
-echo " - 在VSCode中可以在Source Control面板中按文件夹分组查看"
-echo " - 建议开启VSCode的GitLens扩展获得更好的批量diff体验"
-echo " - 分批提交可以让历史更清晰，便于回滚特定组的修改"
 """
+
+        script_content += self._generate_common_batch_script_footer(
+            assignee, len(assignee_groups), len(all_files), batch_branch_name
+        )
 
         return script_content
 
-    def merge_group(self, group_name, source_branch, target_branch, integration_branch):
-        """合并指定组的文件"""
-        plan = self.file_helper.load_plan()
-        if not plan:
-            print("❌ 合并计划文件不存在，请先运行创建合并计划")
-            return False
-
-        # 找到对应组
-        group_info = self.file_helper.find_group_by_name(plan, group_name)
-        if not group_info:
-            print(f"❌ 未找到组: {group_name}")
-            return False
-
-        assignee = group_info["assignee"]
-        if not assignee:
-            print(f"❌ 组 {group_name} 尚未分配负责人")
-            return False
-
-        print(f"🎯 准备合并组: {group_name}")
-        print(f"👤 负责人: {assignee}")
-        print(f"📁 文件数: {group_info.get('file_count', len(group_info['files']))}")
-
-        # 创建合并分支
-        branch_name = self.git_ops.create_merge_branch(
-            group_name, assignee, integration_branch
-        )
-
-        # 生成工作区优先的智能合并脚本
-        script_content = self.generate_smart_merge_script(
-            group_name,
-            assignee,
-            group_info["files"],
-            branch_name,
-            source_branch,
-            target_branch,
-        )
-
-        script_file = self.file_helper.create_script_file(
-            f"legacy_merge_{group_name.replace('/', '_')}", script_content
-        )
-
-        print(f"✅ 已生成工作区优先的智能合并脚本: {script_file}")
-        print(f"🎯 请执行: ./{script_file}")
-        print(f"💡 该脚本使用三路合并策略，结果保留在工作区便于VSCode检查")
-        print(f"📝 完成后在VSCode中检查差异，满意后手动添加到暂存区")
-
-        return True
-
-    def merge_assignee_tasks(
-        self, assignee_name, source_branch, target_branch, integration_branch
+    def _generate_strategy_specific_merge_logic(
+        self, analysis, source_branch, target_branch
     ):
-        """合并指定负责人的所有任务"""
-        plan = self.file_helper.load_plan()
-        if not plan:
-            print("❌ 合并计划文件不存在，请先运行创建合并计划")
-            return False
+        """生成Standard特定的合并逻辑 - 真正的三路合并"""
+        modified_in_both = analysis["modified_in_both"]
 
-        # 找到负责人的所有任务
-        assignee_groups = self.file_helper.get_assignee_groups(plan, assignee_name)
-        if not assignee_groups:
-            print(f"❌ 负责人 '{assignee_name}' 没有分配的任务")
-            return False
+        if not modified_in_both:
+            return ""
 
-        total_files = sum(g.get("file_count", len(g["files"])) for g in assignee_groups)
-        print(f"🎯 开始批量合并负责人 '{assignee_name}' 的所有任务...")
-        print(f"📋 共 {len(assignee_groups)} 个组，总计 {total_files} 个文件")
+        script_logic = f"""
+echo ""
+echo "⚡ 处理需要三路合并的文件 ({len(modified_in_both)}个) - 产生标准冲突标记..."
+"""
 
-        # 收集所有文件
-        all_files = []
-        for group in assignee_groups:
-            all_files.extend(group["files"])
+        for file in modified_in_both:
+            script_logic += f"""
+echo "  [三路合并] {file}"
 
-        if not all_files:
-            print("❌ 没有找到需要合并的文件")
-            return False
+# 创建临时目录用于三路合并
+TEMP_DIR=$(mktemp -d)
+BASE_FILE="$TEMP_DIR/base"
+CURRENT_FILE="$TEMP_DIR/current"
+SOURCE_FILE="$TEMP_DIR/source"
 
-        # 创建统一的合并分支
-        batch_branch_name = self.git_ops.create_batch_merge_branch(
-            assignee_name, integration_branch
-        )
+# 获取三个版本的文件内容
+if [ -n "$MERGE_BASE" ]; then
+    # 有merge-base，使用真正的三路合并
+    git show $MERGE_BASE:"{file}" > "$BASE_FILE" 2>/dev/null || echo "" > "$BASE_FILE"
+    git show {target_branch}:"{file}" > "$CURRENT_FILE" 2>/dev/null || cp "{file}" "$CURRENT_FILE"
+    git show {source_branch}:"{file}" > "$SOURCE_FILE" 2>/dev/null || echo "" > "$SOURCE_FILE"
 
-        # 生成工作区优先的智能批量合并脚本
-        script_content = self.generate_batch_merge_script(
-            assignee_name,
-            assignee_groups,
-            all_files,
-            batch_branch_name,
-            source_branch,
-            target_branch,
-        )
+    # 备份当前文件
+    cp "{file}" "{file}.backup" 2>/dev/null || true
 
-        script_file = self.file_helper.create_script_file(
-            f"legacy_merge_batch_{assignee_name.replace(' ', '_')}", script_content
-        )
+    # 使用git merge-file进行三路合并，设置正确的标签
+    if git merge-file -L "HEAD" -L "merge-base" -L "{source_branch}" --marker-size=7 "$CURRENT_FILE" "$BASE_FILE" "$SOURCE_FILE" 2>/dev/null; then
+        # 无冲突，直接复制结果
+        cp "$CURRENT_FILE" "{file}"
+        echo "    ✅ 三路合并成功，无冲突"
+        total_processed=$((total_processed + 1))
+    else
+        # 有冲突，复制包含冲突标记的结果
+        cp "$CURRENT_FILE" "{file}"
+        echo "    ⚠️ 三路合并产生冲突，已标记在文件中"
+        echo "    💡 冲突标记格式："
+        echo "       <<<<<<< HEAD"
+        echo "       当前分支的内容"
+        echo "       ======="
+        echo "       源分支的内容"
+        echo "       >>>>>>> {source_branch}"
+        conflicts_found=true
+        conflict_files+=("{file}")
+        total_processed=$((total_processed + 1))
+    fi
+else
+    # 没有merge-base，使用两路合并，创建标准冲突标记
+    echo "    ⚠️ 无分叉点，使用两路合并策略"
 
-        print(f"✅ 已生成工作区优先的智能批量合并脚本: {script_file}")
-        print(f"🎯 请执行: ./{script_file}")
-        print(f"💡 该脚本使用三路合并策略，所有结果保留在工作区")
-        print(f"📝 建议在VSCode中按组分批检查和添加文件")
-        print(f"🔄 可以分组提交，便于管理和回滚")
+    # 创建包含冲突标记的合并结果，使用正确的分支标签
+    echo "<<<<<<< HEAD" > "{file}.tmp"
+    git show {target_branch}:"{file}" >> "{file}.tmp" 2>/dev/null || cat "{file}" >> "{file}.tmp"
+    echo "=======" >> "{file}.tmp"
+    git show {source_branch}:"{file}" >> "{file}.tmp" 2>/dev/null || echo "# 源分支版本获取失败" >> "{file}.tmp"
+    echo ">>>>>>> {source_branch}" >> "{file}.tmp"
 
-        return True
+    mv "{file}.tmp" "{file}"
+    echo "    ⚠️ 已创建手动合并模板（包含冲突标记）"
+    conflicts_found=true
+    conflict_files+=("{file}")
+    total_processed=$((total_processed + 1))
+fi
 
-    def finalize_merge(self, integration_branch):
-        """完成最终合并"""
-        print("🎯 开始最终合并...")
+# 清理临时文件
+rm -rf "$TEMP_DIR"
+"""
 
-        plan = self.file_helper.load_plan()
-        if not plan:
-            print("❌ 合并计划文件不存在")
-            return False
+        return script_logic
 
-        # 切换到集成分支
-        self.git_ops.run_command(f"git checkout {integration_branch}")
+    def _print_analysis_result(self, analysis_result):
+        """Standard特定的分析结果显示"""
+        super()._print_analysis_result(analysis_result)
+        modified_in_both = analysis_result["modified_in_both"]
+        if modified_in_both:
+            print(f"  💡 其中 {len(modified_in_both)} 个文件需要三路合并，可能产生冲突标记")
 
-        # 检查哪些分支已完成
-        completed_branches = []
-        for group in plan["groups"]:
-            if group["status"] == "completed" and group.get("assignee"):
-                branch_name = f"feat/merge-{group['name'].replace('/', '-')}-{group['assignee'].replace(' ', '-')}"
-                # 检查分支是否存在
-                if self.git_ops.get_branch_exists(branch_name):
-                    completed_branches.append((branch_name, group))
+    def _print_script_completion_message(self, script_file):
+        """Standard特定的完成消息"""
+        super()._print_script_completion_message(script_file)
+        print(f"💡 Standard模式: 使用Git标准三路合并策略")
+        print(f"⚠️ 冲突文件将包含标准冲突标记 <<<<<<< ======= >>>>>>>")
+        print(f"📝 请在VSCode中检查和解决冲突后手动提交")
+        print(f"🛡️ 优势: 安全可靠，保留完整的合并历史")
 
-        if not completed_branches:
-            print("⚠️ 没有找到已完成的合并分支")
-            return False
+    def _print_batch_script_completion_message(self, script_file):
+        """Standard特定的批量完成消息"""
+        super()._print_batch_script_completion_message(script_file)
+        print(f"💡 Standard批量模式: 使用Git标准三路合并策略")
+        print(f"⚠️ 冲突文件将包含标准冲突标记 <<<<<<< ======= >>>>>>>")
+        print(f"📝 建议在VSCode中按组分批检查和解决冲突")
+        print(f"🔄 可以分组提交，便于管理和问题回滚")
 
-        print(f"🔍 发现 {len(completed_branches)} 个已完成的分支:")
-        total_files = 0
-        for branch_name, group in completed_branches:
-            file_count = group.get("file_count", len(group["files"]))
-            total_files += file_count
-            print(f" - {branch_name} ({file_count} 文件)")
+    def _get_strategy_footer_notes(self):
+        """Standard策略特定的脚本结尾说明"""
+        return """echo " - 这是Git的标准合并策略，最安全可靠"
+echo " - 冲突标记是正常现象，表示两个分支对同一处做了不同修改"
+echo " - 手动解决冲突后的代码质量通常比自动合并更高"
+echo " - 解决冲突时要理解业务逻辑，不只是简单选择一边"
+"""
 
-        print(f"📊 总计将合并 {total_files} 个文件")
-
-        # 合并所有完成的分支
-        all_success = True
-        for branch_name, group in completed_branches:
-            print(f"🔄 正在合并分支: {branch_name}")
-            success = self.git_ops.merge_branch_to_integration(
-                branch_name, group["name"], integration_branch
-            )
-            if success:
-                print(f" ✅ 成功合并 {branch_name}")
-            else:
-                print(f" ❌ 合并 {branch_name} 时出现问题")
-                all_success = False
-
-        if all_success:
-            print("🎉 最终合并完成!")
-            print(f"📋 集成分支 {integration_branch} 已包含所有更改")
-            print(f"🚀 建议操作:")
-            print(f" 1. 验证合并结果: git log --oneline -10")
-            print(f" 2. 运行完整测试套件")
-            print(f" 3. 推送到远程: git push origin {integration_branch}")
-            print(f" 4. 创建PR/MR合并到 {plan['target_branch']}")
-
-        return all_success
+    def _get_batch_strategy_footer_notes(self):
+        """Standard批量策略特定的脚本结尾说明"""
+        return """echo " - 分批验证比一次性处理更安全"
+echo " - 冲突解决要理解业务逻辑，不只是技术层面"
+echo " - 保持与原代码作者的沟通，特别是复杂冲突"
+echo " - 详细测试合并结果，确保功能完整性"
+echo " - 考虑在合并后创建临时分支备份"
+"""
