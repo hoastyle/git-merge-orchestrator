@@ -194,8 +194,11 @@ echo "⚡ 处理两边都修改的文件 ({len(modified_in_both)}个) - 使用�
                 script_content += f"""
 echo "  三路合并文件: {file}"
 
-# 使用git checkout --merge进行三路合并，但不添加到暂存区
+# 使用三路合并但保持结果在工作区
 if git checkout --merge {source_branch} -- "{file}" 2>/dev/null; then
+    # 立即将文件从暂存区移到工作区
+    git reset HEAD -- "{file}" 2>/dev/null || true
+
     # 检查是否有冲突标记
     if grep -q "<<<<<<< " "{file}" 2>/dev/null; then
         echo "    ⚠️ 文件 {file} 存在合并冲突，已在工作区标记"
@@ -426,6 +429,8 @@ echo "⚡ 处理两边都修改的文件 ({len(modified_in_both)}个) - 使用�
                 script_content += f"""
 echo "  三路合并文件: {file}"
 if git checkout --merge {source_branch} -- "{file}" 2>/dev/null; then
+    git reset HEAD -- "{file}" 2>/dev/null || true
+
     if grep -q "<<<<<<< " "{file}" 2>/dev/null; then
         echo "    ⚠️ 文件 {file} 存在合并冲突，已在工作区标记"
         conflicts_found=true
