@@ -102,8 +102,13 @@ class ProjectConfigManager:
             return config.get("source_branch"), config.get("target_branch")
         return None, None
 
-    def update_config(self, **kwargs):
-        """更新配置中的特定字段"""
+    def update_config(self, preserve_timestamp=False, **kwargs):
+        """更新配置中的特定字段
+
+        Args:
+            preserve_timestamp: 是否保留原始时间戳（用于测试）
+            **kwargs: 要更新的配置字段
+        """
         config = self.load_config()
         if not config:
             print("❌ 没有现有配置可以更新")
@@ -114,7 +119,9 @@ class ProjectConfigManager:
             if key in config:
                 config[key] = value
 
-        config["saved_at"] = datetime.now().isoformat()
+        # 只有在不需要保留时间戳时才更新
+        if not preserve_timestamp:
+            config["saved_at"] = datetime.now().isoformat()
 
         try:
             with open(self.config_file, "w", encoding="utf-8") as f:
