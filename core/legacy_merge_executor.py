@@ -13,22 +13,16 @@ class LegacyMergeExecutor(BaseMergeExecutor):
     def get_strategy_description(self):
         return "快速覆盖策略，源分支内容直接覆盖目标分支，无冲突标记"
 
-    def generate_merge_script(
-        self, group_name, assignee, files, branch_name, source_branch, target_branch
-    ):
+    def generate_merge_script(self, group_name, assignee, files, branch_name, source_branch, target_branch):
         """生成Legacy合并脚本"""
         # 分析文件修改情况
         analysis = self.analyze_file_modifications(files, source_branch, target_branch)
 
         # 生成脚本头部
-        script_content = self._generate_common_script_header(
-            group_name, assignee, files, branch_name
-        )
+        script_content = self._generate_common_script_header(group_name, assignee, files, branch_name)
 
         # 添加merge-base检测
-        script_content += self._generate_merge_base_section(
-            source_branch, target_branch
-        )
+        script_content += self._generate_merge_base_section(source_branch, target_branch)
 
         # 添加变量初始化
         script_content += """
@@ -40,19 +34,13 @@ echo "🔄 开始Legacy快速覆盖处理..."
 """
 
         # 添加公共文件处理部分
-        script_content += self._generate_common_file_processing_sections(
-            analysis, source_branch
-        )
+        script_content += self._generate_common_file_processing_sections(analysis, source_branch)
 
         # Legacy特定的冲突文件处理
-        script_content += self._generate_strategy_specific_merge_logic(
-            analysis, source_branch, target_branch
-        )
+        script_content += self._generate_strategy_specific_merge_logic(analysis, source_branch, target_branch)
 
         # 添加通用结尾
-        script_content += self._generate_common_script_footer(
-            group_name, len(files), branch_name
-        )
+        script_content += self._generate_common_script_footer(group_name, len(files), branch_name)
 
         return script_content
 
@@ -66,17 +54,13 @@ echo "🔄 开始Legacy快速覆盖处理..."
         target_branch,
     ):
         """生成Legacy批量合并脚本"""
-        analysis = self.analyze_file_modifications(
-            all_files, source_branch, target_branch
-        )
+        analysis = self.analyze_file_modifications(all_files, source_branch, target_branch)
 
         script_content = self._generate_common_script_header(
             f"batch-{assignee}", assignee, all_files, batch_branch_name, "批量"
         )
 
-        script_content += self._generate_merge_base_section(
-            source_branch, target_branch
-        )
+        script_content += self._generate_merge_base_section(source_branch, target_branch)
 
         # 添加组别详情
         script_content += f"""
@@ -91,21 +75,15 @@ total_processed=0
 echo "🔄 开始Legacy批量快速覆盖处理..."
 """
 
-        script_content += self._generate_common_file_processing_sections(
-            analysis, source_branch
-        )
-        script_content += self._generate_strategy_specific_merge_logic(
-            analysis, source_branch, target_branch
-        )
+        script_content += self._generate_common_file_processing_sections(analysis, source_branch)
+        script_content += self._generate_strategy_specific_merge_logic(analysis, source_branch, target_branch)
         script_content += self._generate_common_batch_script_footer(
             assignee, len(assignee_groups), len(all_files), batch_branch_name
         )
 
         return script_content
 
-    def _generate_strategy_specific_merge_logic(
-        self, analysis, source_branch, target_branch
-    ):
+    def _generate_strategy_specific_merge_logic(self, analysis, source_branch, target_branch):
         """生成Legacy特定的合并逻辑 - 直接覆盖冲突文件"""
         modified_in_both = analysis["modified_in_both"]
 
@@ -181,19 +159,13 @@ class StandardMergeExecutor(BaseMergeExecutor):
     def get_strategy_description(self):
         return "标准Git三路合并，产生冲突标记 <<<<<<< ======= >>>>>>>"
 
-    def generate_merge_script(
-        self, group_name, assignee, files, branch_name, source_branch, target_branch
-    ):
+    def generate_merge_script(self, group_name, assignee, files, branch_name, source_branch, target_branch):
         """生成Standard合并脚本"""
         analysis = self.analyze_file_modifications(files, source_branch, target_branch)
 
-        script_content = self._generate_common_script_header(
-            group_name, assignee, files, branch_name
-        )
+        script_content = self._generate_common_script_header(group_name, assignee, files, branch_name)
 
-        script_content += self._generate_merge_base_section(
-            source_branch, target_branch
-        )
+        script_content += self._generate_merge_base_section(source_branch, target_branch)
 
         script_content += f"""
 merge_success=true
@@ -209,12 +181,8 @@ echo "   >>>>>>> {source_branch}  (源分支内容)"
 echo ""
 """
 
-        script_content += self._generate_common_file_processing_sections(
-            analysis, source_branch
-        )
-        script_content += self._generate_strategy_specific_merge_logic(
-            analysis, source_branch, target_branch
-        )
+        script_content += self._generate_common_file_processing_sections(analysis, source_branch)
+        script_content += self._generate_strategy_specific_merge_logic(analysis, source_branch, target_branch)
 
         # Standard特定的冲突处理说明
         script_content += """
@@ -251,9 +219,7 @@ else
 fi
 """
 
-        script_content += self._generate_common_script_footer(
-            group_name, len(files), branch_name
-        )
+        script_content += self._generate_common_script_footer(group_name, len(files), branch_name)
 
         return script_content
 
@@ -267,17 +233,13 @@ fi
         target_branch,
     ):
         """生成Standard批量合并脚本"""
-        analysis = self.analyze_file_modifications(
-            all_files, source_branch, target_branch
-        )
+        analysis = self.analyze_file_modifications(all_files, source_branch, target_branch)
 
         script_content = self._generate_common_script_header(
             f"batch-{assignee}", assignee, all_files, batch_branch_name, "批量"
         )
 
-        script_content += self._generate_merge_base_section(
-            source_branch, target_branch
-        )
+        script_content += self._generate_merge_base_section(source_branch, target_branch)
 
         script_content += f"""
 echo "📄 组别详情:"
@@ -297,12 +259,8 @@ echo "   >>>>>>> {source_branch}  (源分支内容)"
 echo ""
 """
 
-        script_content += self._generate_common_file_processing_sections(
-            analysis, source_branch
-        )
-        script_content += self._generate_strategy_specific_merge_logic(
-            analysis, source_branch, target_branch
-        )
+        script_content += self._generate_common_file_processing_sections(analysis, source_branch)
+        script_content += self._generate_strategy_specific_merge_logic(analysis, source_branch, target_branch)
 
         # Standard批量特定的冲突处理说明
         script_content += """
@@ -357,9 +315,7 @@ fi
 
         return script_content
 
-    def _generate_strategy_specific_merge_logic(
-        self, analysis, source_branch, target_branch
-    ):
+    def _generate_strategy_specific_merge_logic(self, analysis, source_branch, target_branch):
         """生成Standard特定的合并逻辑 - 真正的三路合并"""
         modified_in_both = analysis["modified_in_both"]
 

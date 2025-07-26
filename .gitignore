@@ -1,0 +1,5 @@
+__pycache__
+.vscode
+.merge_work
+tags
+*.swp

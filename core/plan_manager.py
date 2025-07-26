@@ -33,9 +33,7 @@ class PlanManager:
             print(f"\n📊 差异统计:\n{diff_stats}")
 
         # 创建集成分支
-        integration_branch = self.git_ops.create_integration_branch(
-            source_branch, target_branch
-        )
+        integration_branch = self.git_ops.create_integration_branch(source_branch, target_branch)
         if not integration_branch:
             return None
 
@@ -62,9 +60,7 @@ class PlanManager:
         print(f"🔍 发现 {len(changed_files)} 个变更文件，开始智能分组...")
 
         # 创建集成分支
-        integration_branch = self.git_ops.create_integration_branch(
-            source_branch, target_branch
-        )
+        integration_branch = self.git_ops.create_integration_branch(source_branch, target_branch)
         if not integration_branch:
             return None
 
@@ -104,9 +100,7 @@ class PlanManager:
         self.file_helper.save_plan(merge_plan)
 
         print(f"✅ 智能合并计划已保存至: {self.file_helper.plan_file_path}")
-        print(
-            f"📁 共生成 {len(file_groups)} 个分组，平均每组 {len(changed_files)/len(file_groups):.1f} 个文件"
-        )
+        print(f"📁 共生成 {len(file_groups)} 个分组，平均每组 {len(changed_files)/len(file_groups):.1f} 个文件")
 
         # 显示分组统计
         group_types = defaultdict(int)
@@ -151,21 +145,13 @@ class PlanManager:
         fallback_assigned = 0
 
         for group in plan.get("groups", []):
-            status_icon = (
-                "✅"
-                if group.get("status") == "completed"
-                else "🔄"
-                if group.get("assignee")
-                else "⏳"
-            )
+            status_icon = "✅" if group.get("status") == "completed" else "🔄" if group.get("assignee") else "⏳"
             assignee = group.get("assignee", "未分配")
             file_count = group.get("file_count", len(group.get("files", [])))
 
             # 获取分配类型
             assignment_reason = group.get("assignment_reason", "未指定")
-            assignment_type = DisplayHelper.categorize_assignment_reason(
-                assignment_reason
-            )
+            assignment_type = DisplayHelper.categorize_assignment_reason(assignment_reason)
 
             # 获取推荐信息
             recommended_info = "N/A"
@@ -180,9 +166,7 @@ class PlanManager:
                         recent_commits = contributor_stats.get("recent_commits", 0)
                         score = contributor_stats.get("score", 0)
                         if is_fallback:
-                            recommended_info = (
-                                f"[备选]{group.get('fallback_reason', '')[:15]}"
-                            )
+                            recommended_info = f"[备选]{group.get('fallback_reason', '')[:15]}"
                         else:
                             recommended_info = f"得分:{score}(近期:{recent_commits})"
                     else:
@@ -192,16 +176,12 @@ class PlanManager:
                     try:
                         best_contributor = max(
                             group["contributors"].items(),
-                            key=lambda x: x[1]["score"]
-                            if isinstance(x[1], dict)
-                            else x[1],
+                            key=lambda x: x[1]["score"] if isinstance(x[1], dict) else x[1],
                         )
                         contributor_name = best_contributor[0]
                         stats = best_contributor[1]
                         if isinstance(stats, dict):
-                            recommended_info = (
-                                f"推荐:{contributor_name}({stats['score']})"
-                            )
+                            recommended_info = f"推荐:{contributor_name}({stats['score']})"
                         else:
                             recommended_info = f"推荐:{contributor_name}({stats})"
                     except:
@@ -226,16 +206,9 @@ class PlanManager:
         print(f"🔄 备选分配: {fallback_assigned} 组通过目录分析分配")
 
         if stats.get("assigned_groups", 0) < stats.get("total_groups", 0):
-            unassigned = [
-                g.get("name", "N/A")
-                for g in plan.get("groups", [])
-                if not g.get("assignee")
-            ]
+            unassigned = [g.get("name", "N/A") for g in plan.get("groups", []) if not g.get("assignee")]
             if unassigned:
-                print(
-                    f"\n⚠️ 未分配的组: {', '.join(unassigned[:5])}"
-                    + ("..." if len(unassigned) > 5 else "")
-                )
+                print(f"\n⚠️ 未分配的组: {', '.join(unassigned[:5])}" + ("..." if len(unassigned) > 5 else ""))
 
         # 显示负载分布
         workload_info = DisplayHelper.format_workload_distribution(workload)
@@ -250,9 +223,7 @@ class PlanManager:
             return False
 
         completion_time = datetime.now().isoformat()
-        success = self.file_helper.update_group_status(
-            plan, group_name, "completed", completion_time
-        )
+        success = self.file_helper.update_group_status(plan, group_name, "completed", completion_time)
 
         if success:
             group = self.file_helper.find_group_by_name(plan, group_name)
@@ -353,9 +324,7 @@ class PlanManager:
             # 检查是否有对应的远程分支
             for branch_name in possible_branch_names:
                 if any(branch_name in rb for rb in remote_branches):
-                    potentially_completed.append(
-                        {"group": group, "branch": branch_name, "assignee": assignee}
-                    )
+                    potentially_completed.append({"group": group, "branch": branch_name, "assignee": assignee})
                     break
 
         if potentially_completed:

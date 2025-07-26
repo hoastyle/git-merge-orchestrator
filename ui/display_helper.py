@@ -22,7 +22,7 @@ class DisplayHelper:
         return width
 
     @staticmethod
-    def format_table_cell(text, width, align='left'):
+    def format_table_cell(text, width, align="left"):
         """格式化表格单元格，确保对齐"""
         text_str = str(text)
         display_width = DisplayHelper.get_display_width(text_str)
@@ -53,14 +53,14 @@ class DisplayHelper:
         if padding <= 0:
             return text_str
 
-        if align == 'left':
-            return text_str + ' ' * padding
-        elif align == 'right':
-            return ' ' * padding + text_str
-        elif align == 'center':
+        if align == "left":
+            return text_str + " " * padding
+        elif align == "right":
+            return " " * padding + text_str
+        elif align == "center":
             left_pad = padding // 2
             right_pad = padding - left_pad
-            return ' ' * left_pad + text_str + ' ' * right_pad
+            return " " * left_pad + text_str + " " * right_pad
 
         return text_str
 
@@ -68,32 +68,32 @@ class DisplayHelper:
     def print_table_separator(widths):
         """打印表格分隔线"""
         total_width = sum(widths) + len(widths) - 1
-        print('-' * total_width)
+        print("-" * total_width)
 
     @staticmethod
     def print_table_header(headers, widths, aligns=None):
         """打印表格标题行"""
         if aligns is None:
-            aligns = ['left'] * len(headers)
+            aligns = ["left"] * len(headers)
 
         row = []
         for header, width, align in zip(headers, widths, aligns):
             row.append(DisplayHelper.format_table_cell(header, width, align))
 
-        print(' '.join(row))
+        print(" ".join(row))
         DisplayHelper.print_table_separator(widths)
 
     @staticmethod
     def print_table_row(values, widths, aligns=None):
         """打印表格数据行"""
         if aligns is None:
-            aligns = ['left'] * len(values)
+            aligns = ["left"] * len(values)
 
         row = []
         for value, width, align in zip(values, widths, aligns):
             row.append(DisplayHelper.format_table_cell(value, width, align))
 
-        print(' '.join(row))
+        print(" ".join(row))
 
     @staticmethod
     def auto_adjust_table_width(table_name, data_rows):
@@ -102,9 +102,9 @@ class DisplayHelper:
             return TABLE_CONFIGS.get(table_name, {})
 
         config = TABLE_CONFIGS[table_name].copy()
-        headers = config['headers']
-        widths = config['widths'].copy()
-        aligns = config['aligns']
+        headers = config["headers"]
+        widths = config["widths"].copy()
+        aligns = config["aligns"]
 
         # 计算每列的最大显示宽度
         max_widths = []
@@ -121,13 +121,13 @@ class DisplayHelper:
             max_widths.append(max_width)
 
         # 针对特定列进行智能调整（主要是组名列）
-        if table_name == 'status_overview' and len(max_widths) > 0:
+        if table_name == "status_overview" and len(max_widths) > 0:
             # 组名列（第0列）最少45个字符，最多65个字符
             max_widths[0] = max(45, min(65, max_widths[0] + 2))
-        elif table_name == 'group_list' and len(max_widths) > 1:
+        elif table_name == "group_list" and len(max_widths) > 1:
             # 组名列（第1列）
             max_widths[1] = max(45, min(65, max_widths[1] + 2))
-        elif table_name in ['assignment_reasons', 'assignee_tasks'] and len(max_widths) > 0:
+        elif table_name in ["assignment_reasons", "assignee_tasks"] and len(max_widths) > 0:
             # 组名列（第0列）
             max_widths[0] = max(45, min(65, max_widths[0] + 2))
 
@@ -136,11 +136,7 @@ class DisplayHelper:
             if i < len(max_widths):
                 widths[i] = max(widths[i], max_widths[i])
 
-        return {
-            'headers': headers,
-            'widths': widths,
-            'aligns': aligns
-        }
+        return {"headers": headers, "widths": widths, "aligns": aligns}
 
     @staticmethod
     def print_table(table_name, data_rows, extra_info=None, auto_adjust=True):
@@ -155,9 +151,9 @@ class DisplayHelper:
         else:
             config = TABLE_CONFIGS[table_name]
 
-        headers = config['headers']
-        widths = config['widths']
-        aligns = config['aligns']
+        headers = config["headers"]
+        widths = config["widths"]
+        aligns = config["aligns"]
 
         DisplayHelper.print_table_header(headers, widths, aligns)
 
@@ -173,27 +169,27 @@ class DisplayHelper:
     def get_activity_info(recent_commits, is_active):
         """获取活跃度信息"""
         if not is_active:
-            return ACTIVITY_LEVELS['inactive']
+            return ACTIVITY_LEVELS["inactive"]
 
         for level_name, level_info in ACTIVITY_LEVELS.items():
-            if level_name == 'inactive':
+            if level_name == "inactive":
                 continue
-            if recent_commits >= level_info['threshold']:
+            if recent_commits >= level_info["threshold"]:
                 return level_info
 
-        return ACTIVITY_LEVELS['recent']
+        return ACTIVITY_LEVELS["recent"]
 
     @staticmethod
     def categorize_assignment_reason(reason):
         """将分配原因分类"""
-        if not reason or reason == '未指定':
-            return '未指定'
+        if not reason or reason == "未指定":
+            return "未指定"
 
         for category, keyword in ASSIGNMENT_REASON_TYPES.items():
             if keyword in reason:
                 return category
 
-        return '其他'
+        return "其他"
 
     @staticmethod
     def format_assignment_summary(assignment_count, unassigned_groups):
@@ -206,7 +202,7 @@ class DisplayHelper:
 
         if unassigned_groups:
             summary += f"\n⚠️ 未分配的组 ({len(unassigned_groups)}个): "
-            summary += ', '.join(unassigned_groups[:3])
+            summary += ", ".join(unassigned_groups[:3])
             if len(unassigned_groups) > 3:
                 summary += "..."
 
@@ -219,11 +215,10 @@ class DisplayHelper:
             return ""
 
         distribution = "\n👥 负载分布:\n"
-        sorted_workload = sorted(assignee_workload.items(),
-                               key=lambda x: x[1]["files"], reverse=True)
+        sorted_workload = sorted(assignee_workload.items(), key=lambda x: x[1]["files"], reverse=True)
 
         for person, workload in sorted_workload:
-            fallback_info = f"(含{workload['fallback']}个备选)" if workload['fallback'] > 0 else ""
+            fallback_info = f"(含{workload['fallback']}个备选)" if workload["fallback"] > 0 else ""
             distribution += f" {person}: {workload['completed']}/{workload['groups']} 组完成, "
             distribution += f"{workload['files']} 个文件 {fallback_info}\n"
 
@@ -235,11 +230,11 @@ class DisplayHelper:
         if not stats:
             return "📈 进度统计: 数据不可用"
 
-        assigned_groups = stats.get('assigned_groups', 0)
-        total_groups = stats.get('total_groups', 0)
-        assigned_files = stats.get('assigned_files', 0)
-        total_files = stats.get('total_files', 0)
-        completed_groups = stats.get('completed_groups', 0)
+        assigned_groups = stats.get("assigned_groups", 0)
+        total_groups = stats.get("total_groups", 0)
+        assigned_files = stats.get("assigned_files", 0)
+        total_files = stats.get("total_files", 0)
+        completed_groups = stats.get("completed_groups", 0)
 
         completion_info = f"📈 进度统计: {assigned_groups}/{total_groups} 组已分配 "
         completion_info += f"({assigned_files}/{total_files} 文件), "
@@ -249,73 +244,73 @@ class DisplayHelper:
     @staticmethod
     def display_group_detail(group, file_helper):
         """显示单个组的详细信息"""
-        print("\n" + "="*100)
+        print("\n" + "=" * 100)
         print(f"📁 组详细信息: {group['name']}")
-        print("="*100)
+        print("=" * 100)
 
         # 基本信息
         print(f"📊 基本信息:")
         print(f"   组名: {group['name']}")
-        group_type_desc = file_helper.get_group_type_description(group.get('group_type', 'unknown'))
+        group_type_desc = file_helper.get_group_type_description(group.get("group_type", "unknown"))
         print(f"   类型: {group.get('group_type', 'unknown')} ({group_type_desc})")
         print(f"   文件数: {group.get('file_count', len(group['files']))} 个")
         print(f"   负责人: {group.get('assignee', '未分配')}")
 
-        status = group.get('status', 'pending')
-        status_text = {'completed': '✅ 已完成', 'pending': '⏳ 待分配'}.get(
-            status, '🔄 进行中' if group.get('assignee') else '⏳ 待分配'
+        status = group.get("status", "pending")
+        status_text = {"completed": "✅ 已完成", "pending": "⏳ 待分配"}.get(
+            status, "🔄 进行中" if group.get("assignee") else "⏳ 待分配"
         )
         print(f"   状态: {status_text}")
 
         # 分配原因
-        assignment_reason = group.get('assignment_reason', '未指定')
+        assignment_reason = group.get("assignment_reason", "未指定")
         if assignment_reason:
             print(f"   分配原因: {assignment_reason}")
 
         # 备选分配信息
-        fallback_reason = group.get('fallback_reason', '')
+        fallback_reason = group.get("fallback_reason", "")
         if fallback_reason:
             print(f"   备选原因: {fallback_reason}")
 
         # 文件列表
         print(f"\n📄 包含文件列表:")
-        files = group.get('files', [])
+        files = group.get("files", [])
         for i, file_path in enumerate(files, 1):
             print(f"   {i:2d}. {file_path}")
 
         # 贡献者分析
-        contributors = group.get('contributors', {})
+        contributors = group.get("contributors", {})
         if contributors:
             print(f"\n👥 贡献者分析 (基于一年内活跃度):")
 
             contrib_data = []
-            sorted_contributors = sorted(contributors.items(),
-                                       key=lambda x: x[1]['score'] if isinstance(x[1], dict) else x[1],
-                                       reverse=True)
+            sorted_contributors = sorted(
+                contributors.items(), key=lambda x: x[1]["score"] if isinstance(x[1], dict) else x[1], reverse=True
+            )
 
             for i, (author, stats) in enumerate(sorted_contributors[:10], 1):
                 if isinstance(stats, dict):
-                    recent = stats.get('recent_commits', 0)
-                    total = stats.get('total_commits', 0)
-                    score = stats.get('score', 0)
-                    file_count = stats.get('file_count', 0)
+                    recent = stats.get("recent_commits", 0)
+                    total = stats.get("total_commits", 0)
+                    score = stats.get("score", 0)
+                    file_count = stats.get("file_count", 0)
                     row_data = [str(i), author, str(recent), str(total), str(score), str(file_count)]
                 else:
-                    row_data = [str(i), author, 'N/A', str(stats), str(stats), 'N/A']
+                    row_data = [str(i), author, "N/A", str(stats), str(stats), "N/A"]
 
                 contrib_data.append(row_data)
 
-            DisplayHelper.print_table('contributor_ranking', contrib_data[:len(contrib_data)])
+            DisplayHelper.print_table("contributor_ranking", contrib_data[: len(contrib_data)])
 
             if len(sorted_contributors) > 10:
                 print(f"   ... 还有 {len(sorted_contributors) - 10} 位贡献者")
 
         # 备注信息
-        notes = group.get('notes', '')
+        notes = group.get("notes", "")
         if notes:
             print(f"\n📝 备注: {notes}")
 
-        print("="*100)
+        print("=" * 100)
 
     @staticmethod
     def show_menu():

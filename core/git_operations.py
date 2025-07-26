@@ -70,9 +70,7 @@ class GitOperations:
         if not self.branch_exists(integration_branch):
             # 分支不存在，创建新分支
             print(f"📝 分支不存在，正在创建...")
-            result = self.run_command(
-                f"git checkout -b {integration_branch} {target_branch}"
-            )
+            result = self.run_command(f"git checkout -b {integration_branch} {target_branch}")
             if result is not None:
                 print(f"✅ 已创建集成分支: {integration_branch}")
             else:
@@ -135,9 +133,7 @@ class GitOperations:
 
     def get_active_contributors(self, months=3):
         """获取近N个月有提交的活跃贡献者列表"""
-        cutoff_date = (datetime.now() - timedelta(days=months * 30)).strftime(
-            "%Y-%m-%d"
-        )
+        cutoff_date = (datetime.now() - timedelta(days=months * 30)).strftime("%Y-%m-%d")
         cmd = f'git log --since="{cutoff_date}" --format="%an" --all'
         result = self.run_command(cmd)
 
@@ -169,9 +165,7 @@ class GitOperations:
 
             # 获取一年内的贡献统计
             if include_recent:
-                one_year_ago = (datetime.now() - timedelta(days=365)).strftime(
-                    "%Y-%m-%d"
-                )
+                one_year_ago = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
                 recent_cmd = f'git log --follow --since="{one_year_ago}" --format="%an" -- "{directory_path}"'
                 recent_result = self.run_command(recent_cmd)
 
@@ -180,9 +174,7 @@ class GitOperations:
                     recent_author_counts = {}
                     for author in recent_authors:
                         if author.strip():
-                            recent_author_counts[author] = (
-                                recent_author_counts.get(author, 0) + 1
-                            )
+                            recent_author_counts[author] = recent_author_counts.get(author, 0) + 1
 
                     for author, count in recent_author_counts.items():
                         contributors[author] = {
@@ -205,9 +197,7 @@ class GitOperations:
                 for author, count in author_counts.items():
                     if author in contributors:
                         contributors[author]["total_commits"] = count
-                        contributors[author]["score"] = (
-                            contributors[author]["recent_commits"] * 3 + count
-                        )
+                        contributors[author]["score"] = contributors[author]["recent_commits"] * 3 + count
                     else:
                         contributors[author] = {
                             "total_commits": count,
@@ -241,9 +231,7 @@ class GitOperations:
     def create_batch_merge_branch(self, assignee, integration_branch):
         """创建批量合并分支"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        branch_name = BATCH_BRANCH_TEMPLATE.format(
-            assignee=assignee.replace(" ", "-"), timestamp=timestamp
-        )
+        branch_name = BATCH_BRANCH_TEMPLATE.format(assignee=assignee.replace(" ", "-"), timestamp=timestamp)
 
         self.run_command(f"git checkout {integration_branch}")
         result = self.run_command(f"git checkout -b {branch_name}")
@@ -281,9 +269,7 @@ class GitOperations:
 
     def get_branch_exists(self, branch_name):
         """检查分支是否存在"""
-        result = self.run_command(
-            f"git show-ref --verify --quiet refs/heads/{branch_name}"
-        )
+        result = self.run_command(f"git show-ref --verify --quiet refs/heads/{branch_name}")
         return result is not None
 
     def run_command_silent(self, cmd):
@@ -322,7 +308,5 @@ class GitOperations:
 
     def branch_exists(self, branch_name):
         """检查分支是否存在（静默检查）"""
-        result = self.run_command_silent(
-            f"git show-ref --verify --quiet refs/heads/{branch_name}"
-        )
+        result = self.run_command_silent(f"git show-ref --verify --quiet refs/heads/{branch_name}")
         return result is not None

@@ -23,9 +23,7 @@ class MergeExecutor:
             print("⚠️ 无法确定分叉点，使用简化分析策略")
             return self._simple_file_analysis(files, source_branch, target_branch)
 
-        existing_files, missing_files = self.git_ops.check_file_existence(
-            files, target_branch
-        )
+        existing_files, missing_files = self.git_ops.check_file_existence(files, target_branch)
 
         # 详细分析已存在文件的修改情况
         modified_in_both = []
@@ -68,9 +66,7 @@ class MergeExecutor:
 
     def _simple_file_analysis(self, files, source_branch, target_branch):
         """简化的文件分析策略（当无法确定merge-base时）"""
-        existing_files, missing_files = self.git_ops.check_file_existence(
-            files, target_branch
-        )
+        existing_files, missing_files = self.git_ops.check_file_existence(files, target_branch)
 
         # 简化策略：假设所有已存在文件都可能有冲突
         return {
@@ -355,9 +351,7 @@ echo " - 解决冲突时要理解业务逻辑，不只是简单选择一边"
 
         # 分析所有文件的修改情况
         print(f"🔍 正在分析负责人 '{assignee}' 的所有文件...")
-        analysis = self.analyze_file_modifications(
-            all_files, source_branch, target_branch
-        )
+        analysis = self.analyze_file_modifications(all_files, source_branch, target_branch)
 
         missing_files = analysis["missing_files"]
         modified_only_in_source = analysis["modified_only_in_source"]
@@ -623,9 +617,7 @@ echo " - 考虑在合并后创建临时分支备份"
         print(f"📁 文件数: {group_info.get('file_count', len(group_info['files']))}")
 
         # 创建合并分支
-        branch_name = self.git_ops.create_merge_branch(
-            group_name, assignee, integration_branch
-        )
+        branch_name = self.git_ops.create_merge_branch(group_name, assignee, integration_branch)
 
         # 生成真正的三路合并脚本
         script_content = self.generate_true_three_way_merge_script(
@@ -637,9 +629,7 @@ echo " - 考虑在合并后创建临时分支备份"
             target_branch,
         )
 
-        script_file = self.file_helper.create_script_file(
-            f"merge_{group_name.replace('/', '_')}", script_content
-        )
+        script_file = self.file_helper.create_script_file(f"merge_{group_name.replace('/', '_')}", script_content)
 
         print(f"✅ 已生成真正三路合并脚本: {script_file}")
         print(f"🎯 请执行: ./{script_file}")
@@ -649,9 +639,7 @@ echo " - 考虑在合并后创建临时分支备份"
 
         return True
 
-    def merge_assignee_tasks(
-        self, assignee_name, source_branch, target_branch, integration_branch
-    ):
+    def merge_assignee_tasks(self, assignee_name, source_branch, target_branch, integration_branch):
         """批量合并指定负责人的所有任务 - 使用真正三路合并"""
         plan = self.file_helper.load_plan()
         if not plan:
@@ -678,9 +666,7 @@ echo " - 考虑在合并后创建临时分支备份"
             return False
 
         # 创建统一的合并分支
-        batch_branch_name = self.git_ops.create_batch_merge_branch(
-            assignee_name, integration_branch
-        )
+        batch_branch_name = self.git_ops.create_batch_merge_branch(assignee_name, integration_branch)
 
         # 生成真正的批量三路合并脚本
         script_content = self.generate_batch_true_merge_script(
@@ -743,9 +729,7 @@ echo " - 考虑在合并后创建临时分支备份"
         all_success = True
         for branch_name, group in completed_branches:
             print(f"🔄 正在合并分支: {branch_name}")
-            success = self.git_ops.merge_branch_to_integration(
-                branch_name, group["name"], integration_branch
-            )
+            success = self.git_ops.merge_branch_to_integration(branch_name, group["name"], integration_branch)
             if success:
                 print(f" ✅ 成功合并 {branch_name}")
             else:

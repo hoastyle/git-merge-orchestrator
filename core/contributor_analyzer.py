@@ -43,12 +43,8 @@ class ContributorAnalyzer:
 
             # 获取一年内的贡献统计 (重点)
             if include_recent:
-                one_year_ago = (
-                    datetime.now() - timedelta(days=DEFAULT_ANALYSIS_MONTHS * 30)
-                ).strftime("%Y-%m-%d")
-                recent_contributors = self.git_ops.get_contributors_since(
-                    filepath, one_year_ago
-                )
+                one_year_ago = (datetime.now() - timedelta(days=DEFAULT_ANALYSIS_MONTHS * 30)).strftime("%Y-%m-%d")
+                recent_contributors = self.git_ops.get_contributors_since(filepath, one_year_ago)
 
                 for author, count in recent_contributors.items():
                     contributors[author] = {
@@ -64,8 +60,7 @@ class ContributorAnalyzer:
                 if author in contributors:
                     contributors[author]["total_commits"] = count
                     contributors[author]["score"] = (
-                        contributors[author]["recent_commits"]
-                        * SCORING_WEIGHTS["recent_commits"]
+                        contributors[author]["recent_commits"] * SCORING_WEIGHTS["recent_commits"]
                         + count * SCORING_WEIGHTS["total_commits"]
                     )
                 else:
@@ -127,9 +122,7 @@ class ContributorAnalyzer:
                     directories_to_check.add(parent_dir)
 
         # 按目录层级排序，优先检查更具体的目录
-        sorted_dirs = sorted(
-            directories_to_check, key=lambda x: x.count("/"), reverse=True
-        )
+        sorted_dirs = sorted(directories_to_check, key=lambda x: x.count("/"), reverse=True)
 
         for directory in sorted_dirs:
             print(f"  检查目录: {directory}")
@@ -138,16 +131,12 @@ class ContributorAnalyzer:
             if dir_contributors:
                 # 找到活跃的贡献者
                 active_dir_contributors = {
-                    author: stats
-                    for author, stats in dir_contributors.items()
-                    if author in active_contributors
+                    author: stats for author, stats in dir_contributors.items() if author in active_contributors
                 }
 
                 if active_dir_contributors:
                     # 返回评分最高的活跃贡献者
-                    best_contributor = max(
-                        active_dir_contributors.items(), key=lambda x: x[1]["score"]
-                    )
+                    best_contributor = max(active_dir_contributors.items(), key=lambda x: x[1]["score"])
                     print(
                         f"  ✅ 在目录 {directory} 找到候选人: {best_contributor[0]} (得分: {best_contributor[1]['score']})"
                     )
@@ -158,26 +147,18 @@ class ContributorAnalyzer:
         root_contributors = self.analyze_directory_contributors(".")
         if root_contributors:
             active_root_contributors = {
-                author: stats
-                for author, stats in root_contributors.items()
-                if author in active_contributors
+                author: stats for author, stats in root_contributors.items() if author in active_contributors
             }
 
             if active_root_contributors:
-                best_contributor = max(
-                    active_root_contributors.items(), key=lambda x: x[1]["score"]
-                )
-                print(
-                    f"  ✅ 在根目录找到候选人: {best_contributor[0]} (得分: {best_contributor[1]['score']})"
-                )
+                best_contributor = max(active_root_contributors.items(), key=lambda x: x[1]["score"])
+                print(f"  ✅ 在根目录找到候选人: {best_contributor[0]} (得分: {best_contributor[1]['score']})")
                 return best_contributor[0], best_contributor[1], "根目录"
 
         print("  ❌ 未找到合适的候选人")
         return None, None, None
 
-    def get_contributor_activity_level(
-        self, author, recent_commits, active_contributors
-    ):
+    def get_contributor_activity_level(self, author, recent_commits, active_contributors):
         """获取贡献者活跃度等级"""
         if author not in active_contributors:
             return "inactive"
@@ -209,12 +190,8 @@ class ContributorAnalyzer:
                     }
 
                 if isinstance(stats, dict):
-                    all_contributors_global[author]["recent_commits"] += stats[
-                        "recent_commits"
-                    ]
-                    all_contributors_global[author]["total_commits"] += stats[
-                        "total_commits"
-                    ]
+                    all_contributors_global[author]["recent_commits"] += stats["recent_commits"]
+                    all_contributors_global[author]["total_commits"] += stats["total_commits"]
                     all_contributors_global[author]["score"] += stats["score"]
                 else:
                     all_contributors_global[author]["total_commits"] += stats
@@ -224,9 +201,7 @@ class ContributorAnalyzer:
 
                 # 检查是否被分配到这个组
                 if group.get("assignee") == author:
-                    all_contributors_global[author]["groups_assigned"].append(
-                        group["name"]
-                    )
+                    all_contributors_global[author]["groups_assigned"].append(group["name"])
 
         return all_contributors_global
 
@@ -247,9 +222,7 @@ class ContributorAnalyzer:
                         "fallback": 0,
                     }
                 assignee_workload[assignee]["groups"] += 1
-                assignee_workload[assignee]["files"] += group.get(
-                    "file_count", len(group.get("files", []))
-                )
+                assignee_workload[assignee]["files"] += group.get("file_count", len(group.get("files", [])))
                 if group.get("status") == "completed":
                     assignee_workload[assignee]["completed"] += 1
                 if group.get("fallback_reason"):

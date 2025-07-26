@@ -33,9 +33,7 @@ class BaseMergeExecutor(ABC):
             print("⚠️ 无法确定分叉点，使用简化分析策略")
             return self._simple_file_analysis(files, source_branch, target_branch)
 
-        existing_files, missing_files = self.git_ops.check_file_existence(
-            files, target_branch
-        )
+        existing_files, missing_files = self.git_ops.check_file_existence(files, target_branch)
 
         # 详细分析已存在文件的修改情况
         modified_in_both = []
@@ -74,9 +72,7 @@ class BaseMergeExecutor(ABC):
 
     def _simple_file_analysis(self, files, source_branch, target_branch):
         """简化的文件分析策略（公共逻辑）"""
-        existing_files, missing_files = self.git_ops.check_file_existence(
-            files, target_branch
-        )
+        existing_files, missing_files = self.git_ops.check_file_existence(files, target_branch)
 
         return {
             "missing_files": missing_files,
@@ -109,9 +105,7 @@ class BaseMergeExecutor(ABC):
         print(f"💡 {self.get_strategy_description()}")
 
         # 创建合并分支
-        branch_name = self.git_ops.create_merge_branch(
-            group_name, assignee, integration_branch
-        )
+        branch_name = self.git_ops.create_merge_branch(group_name, assignee, integration_branch)
 
         # 策略特定的脚本生成
         script_content = self.generate_merge_script(
@@ -131,9 +125,7 @@ class BaseMergeExecutor(ABC):
         self._print_script_completion_message(script_file)
         return True
 
-    def merge_assignee_tasks(
-        self, assignee_name, source_branch, target_branch, integration_branch
-    ):
+    def merge_assignee_tasks(self, assignee_name, source_branch, target_branch, integration_branch):
         """批量合并指定负责人任务（模板方法）"""
         plan = self.file_helper.load_plan()
         if not plan:
@@ -160,9 +152,7 @@ class BaseMergeExecutor(ABC):
             return False
 
         # 创建批量合并分支
-        batch_branch_name = self.git_ops.create_batch_merge_branch(
-            assignee_name, integration_branch
-        )
+        batch_branch_name = self.git_ops.create_batch_merge_branch(assignee_name, integration_branch)
 
         # 策略特定的批量脚本生成
         script_content = self.generate_batch_merge_script(
@@ -219,9 +209,7 @@ class BaseMergeExecutor(ABC):
         all_success = True
         for branch_name, group in completed_branches:
             print(f"🔄 正在合并分支: {branch_name}")
-            success = self.git_ops.merge_branch_to_integration(
-                branch_name, group["name"], integration_branch
-            )
+            success = self.git_ops.merge_branch_to_integration(branch_name, group["name"], integration_branch)
             if success:
                 print(f" ✅ 成功合并 {branch_name}")
             else:
@@ -238,9 +226,7 @@ class BaseMergeExecutor(ABC):
     # === 抽象方法：子类必须实现 ===
 
     @abstractmethod
-    def generate_merge_script(
-        self, group_name, assignee, files, branch_name, source_branch, target_branch
-    ):
+    def generate_merge_script(self, group_name, assignee, files, branch_name, source_branch, target_branch):
         """生成合并脚本（策略特定）"""
         pass
 
@@ -268,9 +254,7 @@ class BaseMergeExecutor(ABC):
         pass
 
     @abstractmethod
-    def _generate_strategy_specific_merge_logic(
-        self, analysis, source_branch, target_branch
-    ):
+    def _generate_strategy_specific_merge_logic(self, analysis, source_branch, target_branch):
         """生成策略特定的合并逻辑（核心差异）"""
         pass
 
@@ -304,16 +288,12 @@ class BaseMergeExecutor(ABC):
         print(f"🚀 建议操作:")
         print(f" 1. 验证合并结果: git log --oneline -10")
         print(f" 2. 运行完整测试套件")
-        print(
-            f" 3. 推送到远程: git push origin {plan.get('integration_branch', 'integration')}"
-        )
+        print(f" 3. 推送到远程: git push origin {plan.get('integration_branch', 'integration')}")
         print(f" 4. 创建PR/MR合并到 {plan.get('target_branch', 'main')}")
 
     # === 公共辅助方法 ===
 
-    def _generate_common_script_header(
-        self, group_name, assignee, files, branch_name, script_type="单组"
-    ):
+    def _generate_common_script_header(self, group_name, assignee, files, branch_name, script_type="单组"):
         """生成脚本通用头部"""
         file_count = len(files)
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -454,9 +434,7 @@ echo "💡 {self.get_strategy_name()}模式说明："
 {self._get_strategy_footer_notes()}
 """
 
-    def _generate_common_batch_script_footer(
-        self, assignee, group_count, file_count, branch_name
-    ):
+    def _generate_common_batch_script_footer(self, assignee, group_count, file_count, branch_name):
         """生成批量脚本通用结尾"""
         return f"""
 echo ""

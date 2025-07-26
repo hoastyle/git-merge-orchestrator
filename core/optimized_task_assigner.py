@@ -38,9 +38,7 @@ class OptimizedTaskAssigner:
         print("🔍 自动排除近3个月无提交的人员")
 
         # Step 1: 批量获取活跃贡献者（优化）
-        active_contributors = self.contributor_analyzer.get_active_contributors(
-            DEFAULT_ACTIVE_MONTHS
-        )
+        active_contributors = self.contributor_analyzer.get_active_contributors(DEFAULT_ACTIVE_MONTHS)
 
         # Step 2: 批量获取所有贡献者（优化）
         all_contributors = self.contributor_analyzer.get_all_contributors()
@@ -58,9 +56,7 @@ class OptimizedTaskAssigner:
 
         # Step 3: 并行分析所有组的贑献者信息（核心优化）
         print(f"⚡ 开始并行分析 {len(plan['groups'])} 个组的贡献者...")
-        group_analysis_results = self.contributor_analyzer.parallel_analyze_groups(
-            plan["groups"]
-        )
+        group_analysis_results = self.contributor_analyzer.parallel_analyze_groups(plan["groups"])
 
         # Step 4: 快速分配任务
         assignment_count = {}
@@ -144,10 +140,7 @@ class OptimizedTaskAssigner:
             "inactive_contributors": inactive_contributors,
             "performance_stats": {
                 "elapsed_seconds": elapsed,
-                "cache_hit_rate": perf_stats["cached_files"]
-                / len(plan.get("groups", []))
-                if plan.get("groups")
-                else 0,
+                "cache_hit_rate": perf_stats["cached_files"] / len(plan.get("groups", [])) if plan.get("groups") else 0,
                 **perf_stats,
             },
         }
@@ -162,20 +155,15 @@ class OptimizedTaskAssigner:
         main_contributor,
     ):
         """尝试负载均衡分配"""
-        sorted_contributors = sorted(
-            all_contributors.items(), key=lambda x: x[1]["score"], reverse=True
-        )
+        sorted_contributors = sorted(all_contributors.items(), key=lambda x: x[1]["score"], reverse=True)
 
         for author, stats in sorted_contributors[1:]:  # 跳过主要贡献者
-            if (
-                author not in all_excluded
-                and assignment_count.get(author, 0) < max_tasks_per_person
-            ):
+            if author not in all_excluded and assignment_count.get(author, 0) < max_tasks_per_person:
                 group["assignee"] = author
                 assignment_count[author] = assignment_count.get(author, 0) + 1
-                group[
-                    "assignment_reason"
-                ] = f"负载均衡分配 (原推荐{main_contributor}已满负荷, 一年内:{stats['recent_commits']}, 历史:{stats['total_commits']}, 得分:{stats['score']})"
+                group["assignment_reason"] = (
+                    f"负载均衡分配 (原推荐{main_contributor}已满负荷, 一年内:{stats['recent_commits']}, 历史:{stats['total_commits']}, 得分:{stats['score']})"
+                )
                 print(f"    ✅ 负载均衡分配给: {author} (得分: {stats['score']})")
                 return True
 
@@ -202,9 +190,9 @@ class OptimizedTaskAssigner:
                 group["assignee"] = fallback_assignee
                 assignment_count[fallback_assignee] = current_count + 1
                 group["fallback_reason"] = f"通过{fallback_source}目录分析分配"
-                group[
-                    "assignment_reason"
-                ] = f"备选目录分配 (来源:{fallback_source}, 一年内:{fallback_stats['recent_commits']}, 历史:{fallback_stats['total_commits']}, 得分:{fallback_stats['score']})"
+                group["assignment_reason"] = (
+                    f"备选目录分配 (来源:{fallback_source}, 一年内:{fallback_stats['recent_commits']}, 历史:{fallback_stats['total_commits']}, 得分:{fallback_stats['score']})"
+                )
                 print(
                     f"    ✅ 备选分配给: {fallback_assignee} (来源: {fallback_source}, 得分: {fallback_stats['score']})"
                 )
@@ -232,16 +220,12 @@ class OptimizedTaskAssigner:
         else:
             return "无法确定主要贡献者"
 
-    def batch_get_assignment_suggestions(
-        self, groups, active_contributors, max_tasks_per_person, current_assignments
-    ):
+    def batch_get_assignment_suggestions(self, groups, active_contributors, max_tasks_per_person, current_assignments):
         """批量获取分配建议"""
         print(f"💡 正在为 {len(groups)} 个组生成分配建议...")
 
         # 批量分析所有组
-        group_analysis_results = self.contributor_analyzer.parallel_analyze_groups(
-            groups
-        )
+        group_analysis_results = self.contributor_analyzer.parallel_analyze_groups(groups)
 
         suggestions = {}
         for group in groups:
@@ -253,9 +237,7 @@ class OptimizedTaskAssigner:
             group_suggestions = []
             if all_contributors:
                 # 按得分排序
-                sorted_contributors = sorted(
-                    all_contributors.items(), key=lambda x: x[1]["score"], reverse=True
-                )
+                sorted_contributors = sorted(all_contributors.items(), key=lambda x: x[1]["score"], reverse=True)
 
                 for author, stats in sorted_contributors[:5]:  # 前5名
                     is_active = author in active_contributors
@@ -320,9 +302,7 @@ class OptimizedTaskAssigner:
                 if suggestion["can_assign"] and suggestion["is_active"]:
                     group["assignee"] = suggestion["author"]
                     group["assignment_reason"] = "智能负载重平衡分配"
-                    assignment_count[suggestion["author"]] = (
-                        assignment_count.get(suggestion["author"], 0) + 1
-                    )
+                    assignment_count[suggestion["author"]] = assignment_count.get(suggestion["author"], 0) + 1
                     print(f" ✅ 重新分配组 {group['name']} 给 {suggestion['author']}")
                     break
             else:
@@ -360,9 +340,7 @@ class OptimizedTaskAssigner:
         include_fallback=True,
     ):
         """自动分配任务（兼容接口，使用优化版本）"""
-        return self.turbo_auto_assign_tasks(
-            plan, exclude_authors, max_tasks_per_person, include_fallback
-        )
+        return self.turbo_auto_assign_tasks(plan, exclude_authors, max_tasks_per_person, include_fallback)
 
     def manual_assign_tasks(self, plan, assignments):
         """手动分配任务（保持不变）"""
