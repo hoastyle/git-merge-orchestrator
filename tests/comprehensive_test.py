@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from unittest.mock import patch, MagicMock
 
 # 添加项目根目录到Python路径
-sys.path.append(str(Path(__file__).parent))
+sys.path.append(str(Path(__file__).parent.parent))
 
 
 # 测试统计
@@ -39,7 +39,9 @@ class TestStats:
             "total": self.total_tests,
             "passed": self.passed_tests,
             "failed": len(self.failed_tests),
-            "success_rate": (self.passed_tests / self.total_tests * 100) if self.total_tests > 0 else 0,
+            "success_rate": (self.passed_tests / self.total_tests * 100)
+            if self.total_tests > 0
+            else 0,
             "elapsed": elapsed.total_seconds(),
             "failures": self.failed_tests,
         }
@@ -94,13 +96,25 @@ class ComprehensiveTestSuite:
         if with_history:
             # 初始化Git仓库
             subprocess.run(["git", "init"], cwd=temp_dir, capture_output=True)
-            subprocess.run(["git", "config", "user.name", "Test User"], cwd=temp_dir, capture_output=True)
-            subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=temp_dir, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.name", "Test User"],
+                cwd=temp_dir,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.email", "test@example.com"],
+                cwd=temp_dir,
+                capture_output=True,
+            )
 
             # 创建测试文件和提交
             (Path(temp_dir) / "test.txt").write_text("test content")
             subprocess.run(["git", "add", "."], cwd=temp_dir, capture_output=True)
-            subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=temp_dir, capture_output=True)
+            subprocess.run(
+                ["git", "commit", "-m", "Initial commit"],
+                cwd=temp_dir,
+                capture_output=True,
+            )
 
         return temp_dir
 
@@ -289,7 +303,11 @@ class ComprehensiveTestSuite:
     @test_wrapper("性能监控功能测试")
     def test_performance_monitoring(self):
         """测试性能监控功能"""
-        from utils.performance_monitor import performance_monitor, timing_context, PerformanceStats
+        from utils.performance_monitor import (
+            performance_monitor,
+            timing_context,
+            PerformanceStats,
+        )
 
         # 测试性能监控装饰器
         @performance_monitor("测试操作")
@@ -444,15 +462,26 @@ class ComprehensiveTestSuite:
         temp_repo = self.create_temp_repo(with_history=True)
 
         # 创建第二个分支用于测试
-        subprocess.run(["git", "checkout", "-b", "feature/test"], cwd=temp_repo, capture_output=True)
+        subprocess.run(
+            ["git", "checkout", "-b", "feature/test"],
+            cwd=temp_repo,
+            capture_output=True,
+        )
         (Path(temp_repo) / "feature.txt").write_text("feature content")
         subprocess.run(["git", "add", "."], cwd=temp_repo, capture_output=True)
-        subprocess.run(["git", "commit", "-m", "Add feature"], cwd=temp_repo, capture_output=True)
-        subprocess.run(["git", "checkout", "master"], cwd=temp_repo, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", "Add feature"], cwd=temp_repo, capture_output=True
+        )
+        subprocess.run(
+            ["git", "checkout", "master"], cwd=temp_repo, capture_output=True
+        )
 
         try:
             orchestrator = GitMergeOrchestrator(
-                source_branch="feature/test", target_branch="master", repo_path=temp_repo, max_files_per_group=3
+                source_branch="feature/test",
+                target_branch="master",
+                repo_path=temp_repo,
+                max_files_per_group=3,
             )
 
             # 测试基本属性
@@ -570,7 +599,13 @@ class ComprehensiveTestSuite:
     def run_all_tests(self, test_categories=None):
         """运行所有测试或指定类别的测试"""
         if test_categories is None:
-            test_categories = ["config", "deployment", "performance", "integration", "error_handling"]
+            test_categories = [
+                "config",
+                "deployment",
+                "performance",
+                "integration",
+                "error_handling",
+            ]
 
         print("🚀 Git Merge Orchestrator 综合测试套件")
         print("=" * 80)
@@ -690,7 +725,14 @@ def main():
     parser.add_argument(
         "--category",
         "-c",
-        choices=["config", "deployment", "performance", "merge_strategies", "integration", "error_handling"],
+        choices=[
+            "config",
+            "deployment",
+            "performance",
+            "merge_strategies",
+            "integration",
+            "error_handling",
+        ],
         nargs="+",
         help="运行指定类别的测试",
     )
