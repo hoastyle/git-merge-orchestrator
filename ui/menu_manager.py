@@ -78,9 +78,7 @@ class MenuManager:
                 stats = summary["stats"]
                 strategy = summary["merge_strategy"]
 
-                print(
-                    f"📊 项目状态: {stats['completed_groups']}/{stats['total_groups']} 组已完成"
-                )
+                print(f"📊 项目状态: {stats['completed_groups']}/{stats['total_groups']} 组已完成")
                 print(f"🔧 当前策略: {strategy['mode_name']}")
 
                 if stats["total_groups"] > 0:
@@ -309,12 +307,8 @@ class MenuManager:
                 print("=" * 40)
                 print(f"📁 总分组数: {stats['total_groups']}")
                 print(f"📄 总文件数: {stats['total_files']}")
-                print(
-                    f"👥 已分配组: {stats['assigned_groups']} ({stats['assigned_files']} 文件)"
-                )
-                print(
-                    f"✅ 已完成组: {stats['completed_groups']} ({stats['completed_files']} 文件)"
-                )
+                print(f"👥 已分配组: {stats['assigned_groups']} ({stats['assigned_files']} 文件)")
+                print(f"✅ 已完成组: {stats['completed_groups']} ({stats['completed_files']} 文件)")
                 print(f"🔧 合并策略: {strategy['mode_name']}")
 
                 if stats["total_groups"] > 0:
@@ -398,9 +392,7 @@ class MenuManager:
         print("🤖 涡轮增压智能自动分配模式 (活跃度过滤+备选方案)")
 
         exclude_input = input("请输入要排除的作者列表 (用逗号分隔，回车跳过): ").strip()
-        exclude_authors = (
-            [name.strip() for name in exclude_input.split(",")] if exclude_input else []
-        )
+        exclude_authors = [name.strip() for name in exclude_input.split(",")] if exclude_input else []
 
         max_tasks_input = input("每人最大任务数 (默认3): ").strip()
         max_tasks = int(max_tasks_input) if max_tasks_input.isdigit() else 3
@@ -408,9 +400,7 @@ class MenuManager:
         fallback_input = input("启用备选分配方案? (Y/n): ").strip().lower()
         include_fallback = fallback_input != "n"
 
-        self.orchestrator.auto_assign_tasks(
-            exclude_authors, max_tasks, include_fallback
-        )
+        self.orchestrator.auto_assign_tasks(exclude_authors, max_tasks, include_fallback)
 
     def _handle_manual_assign_submenu(self):
         """处理手动分配子菜单"""
@@ -508,12 +498,11 @@ class MenuManager:
             DisplayHelper.print_warning("无效选择")
 
     # === 系统管理 ===
-
     def _handle_system_management_menu(self):
         """处理系统管理菜单"""
         while True:
             self._show_system_management_menu()
-            choice = input("\n请选择操作 (a-e): ").strip().lower()
+            choice = input("\n请选择操作 (a-f): ").strip().lower()
 
             if choice == "a":
                 self._handle_merge_strategy_submenu()
@@ -522,11 +511,13 @@ class MenuManager:
             elif choice == "c":
                 self._handle_status_management_submenu()
             elif choice == "d":
-                self.orchestrator.view_group_details()
+                self._handle_config_management_submenu()
             elif choice == "e":
+                self.orchestrator.view_group_details()
+            elif choice == "f":
                 break
             else:
-                DisplayHelper.print_warning("无效选择，请输入a-e")
+                DisplayHelper.print_warning("无效选择，请输入a-f")
 
     def _show_system_management_menu(self):
         """显示系统管理菜单"""
@@ -707,9 +698,7 @@ class MenuManager:
 
                 # 效率统计
                 if stats["completed_groups"] > 0:
-                    completion_rate = (
-                        stats["completed_groups"] / stats["total_groups"] * 100
-                    )
+                    completion_rate = stats["completed_groups"] / stats["total_groups"] * 100
                     print(f"   完成率: {completion_rate:.1f}%")
 
             # Git仓库信息
@@ -760,20 +749,14 @@ class MenuManager:
         print(f"   Git版本: {result if result else '获取失败'}")
 
         # 分支信息
-        current_branch = self.orchestrator.git_ops.run_command(
-            "git branch --show-current"
-        )
+        current_branch = self.orchestrator.git_ops.run_command("git branch --show-current")
         print(f"   当前分支: {current_branch if current_branch else '获取失败'}")
 
         # 文件系统
         print(f"\n💾 文件系统:")
         print(f"   工作目录: {self.orchestrator.file_helper.work_dir}")
-        print(
-            f"   工作目录存在: {'✅' if self.orchestrator.file_helper.work_dir.exists() else '❌'}"
-        )
-        print(
-            f"   计划文件存在: {'✅' if self.orchestrator.file_helper.plan_file_path.exists() else '❌'}"
-        )
+        print(f"   工作目录存在: {'✅' if self.orchestrator.file_helper.work_dir.exists() else '❌'}")
+        print(f"   计划文件存在: {'✅' if self.orchestrator.file_helper.plan_file_path.exists() else '❌'}")
 
         # 模块状态
         print(f"\n🧩 模块状态:")

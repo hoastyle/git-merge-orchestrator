@@ -27,9 +27,7 @@ class TaskAssigner:
         print("🔍 自动排除近3个月无提交的人员")
 
         # 获取活跃贡献者
-        active_contributors = self.contributor_analyzer.get_active_contributors(
-            DEFAULT_ACTIVE_MONTHS
-        )
+        active_contributors = self.contributor_analyzer.get_active_contributors(DEFAULT_ACTIVE_MONTHS)
 
         # 自动添加不活跃的人员到排除列表
         all_contributors = self.contributor_analyzer.get_all_contributors()
@@ -52,9 +50,7 @@ class TaskAssigner:
             print(f"\n分析组: {group['name']} ({group['file_count']} 个文件)")
 
             # 获取主要贡献者（重点关注一年内）
-            main_contributor, all_contributors = self.contributor_analyzer.get_group_main_contributor(
-                group["files"]
-            )
+            main_contributor, all_contributors = self.contributor_analyzer.get_group_main_contributor(group["files"])
 
             assigned = False
             assignment_reason = ""
@@ -80,14 +76,9 @@ class TaskAssigner:
                         reverse=True,
                     )
                     for author, stats in sorted_contributors[1:]:
-                        if (
-                            author not in all_excluded
-                            and assignment_count.get(author, 0) < max_tasks_per_person
-                        ):
+                        if author not in all_excluded and assignment_count.get(author, 0) < max_tasks_per_person:
                             group["assignee"] = author
-                            assignment_count[author] = (
-                                assignment_count.get(author, 0) + 1
-                            )
+                            assignment_count[author] = assignment_count.get(author, 0) + 1
                             assignment_reason = f"负载均衡分配 (原推荐{main_contributor}已满负荷, 一年内:{stats['recent_commits']}, 历史:{stats['total_commits']}, 得分:{stats['score']})"
                             print(f" ✅ 分配给: {author}")
                             print(
@@ -122,26 +113,22 @@ class TaskAssigner:
                 if main_contributor:
                     if main_contributor in all_excluded:
                         if main_contributor in inactive_contributors:
-                            assignment_reason = (
-                                f"主要贡献者{main_contributor}近3个月无活跃提交，已自动排除"
-                            )
+                            assignment_reason = f"主要贡献者{main_contributor}近3个月无活跃提交，已自动排除"
                             print(f" ⚠️ 主要贡献者 {main_contributor} 近3个月无活跃提交，已自动排除")
                             group["notes"] = f"建议: {main_contributor} (近期活跃度不足，已自动排除)"
                         else:
                             assignment_reason = f"主要贡献者{main_contributor}在手动排除列表中"
                             print(f" ⚠️ 主要贡献者 {main_contributor} 在手动排除列表中")
                             main_stats = all_contributors[main_contributor]
-                            group[
-                                "notes"
-                            ] = f"建议: {main_contributor} (近期:{main_stats['recent_commits']},历史:{main_stats['total_commits']},得分:{main_stats['score']}) 已手动排除"
+                            group["notes"] = (
+                                f"建议: {main_contributor} (近期:{main_stats['recent_commits']},历史:{main_stats['total_commits']},得分:{main_stats['score']}) 已手动排除"
+                            )
                     else:
-                        assignment_reason = (
-                            f"主要贡献者{main_contributor}已达最大任务数{max_tasks_per_person}"
-                        )
+                        assignment_reason = f"主要贡献者{main_contributor}已达最大任务数{max_tasks_per_person}"
                         main_stats = all_contributors[main_contributor]
-                        group[
-                            "notes"
-                        ] = f"建议: {main_contributor} (近期:{main_stats['recent_commits']},历史:{main_stats['total_commits']},得分:{main_stats['score']}) 但已达最大任务数"
+                        group["notes"] = (
+                            f"建议: {main_contributor} (近期:{main_stats['recent_commits']},历史:{main_stats['total_commits']},得分:{main_stats['score']}) 但已达最大任务数"
+                        )
                         print(f" ⚠️ 主要贡献者 {main_contributor} 已达最大任务数")
                 else:
                     assignment_reason = "无法确定主要贡献者"
@@ -170,13 +157,9 @@ class TaskAssigner:
 
         return plan
 
-    def get_assignment_suggestions(
-        self, group, active_contributors, max_tasks_per_person, current_assignments
-    ):
+    def get_assignment_suggestions(self, group, active_contributors, max_tasks_per_person, current_assignments):
         """获取分配建议"""
-        main_contributor, all_contributors = self.contributor_analyzer.get_group_main_contributor(
-            group["files"]
-        )
+        main_contributor, all_contributors = self.contributor_analyzer.get_group_main_contributor(group["files"])
 
         suggestions = []
 
@@ -184,9 +167,7 @@ class TaskAssigner:
             return suggestions
 
         # 按得分排序
-        sorted_contributors = sorted(
-            all_contributors.items(), key=lambda x: x[1]["score"], reverse=True
-        )
+        sorted_contributors = sorted(all_contributors.items(), key=lambda x: x[1]["score"], reverse=True)
 
         for author, stats in sorted_contributors[:5]:  # 前5名
             is_active = author in active_contributors
@@ -262,9 +243,7 @@ class TaskAssigner:
                 if suggestion["can_assign"] and suggestion["is_active"]:
                     group["assignee"] = suggestion["author"]
                     group["assignment_reason"] = "负载重平衡分配"
-                    assignment_count[suggestion["author"]] = (
-                        assignment_count.get(suggestion["author"], 0) + 1
-                    )
+                    assignment_count[suggestion["author"]] = assignment_count.get(suggestion["author"], 0) + 1
                     print(f" ✅ 重新分配组 {group['name']} 给 {suggestion['author']}")
                     break
             else:
