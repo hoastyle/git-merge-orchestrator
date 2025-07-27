@@ -52,9 +52,9 @@ TABLE_CONFIGS = {
         "aligns": ["center", "left", "left", "center", "left", "center"],
     },
     "contributor_ranking": {
-        "headers": ["排名", "姓名", "近期", "历史", "得分", "活跃状态", "参与组", "分配组", "近期活跃"],
-        "widths": [6, 25, 6, 6, 8, 10, 8, 8, 10],
-        "aligns": ["center", "left", "center", "center", "center", "center", "center", "center", "center"],
+        "headers": ["排名", "姓名", "近期提交", "近期行数", "历史提交", "历史行数", "综合得分", "活跃状态", "参与组", "分配组"],
+        "widths": [6, 20, 8, 8, 8, 8, 10, 10, 8, 8],
+        "aligns": ["center", "left", "center", "center", "center", "center", "center", "center", "center", "center"],
     },
     "assignment_reasons": {
         "headers": ["组名", "负责人", "文件数", "分配类型", "详细原因"],
@@ -77,8 +77,13 @@ ACTIVITY_LEVELS = {
     "inactive": {"threshold": -1, "icon": "💤", "name": "静默"},
 }
 
-# 评分权重配置
-SCORING_WEIGHTS = {"recent_commits": 3, "total_commits": 1}  # 一年内提交权重  # 历史提交权重
+# 评分权重配置 (更新为综合评分)
+SCORING_WEIGHTS = {
+    "recent_commits": 2,      # 一年内提交权重 (从3降到2)
+    "recent_lines": 0.1,      # 一年内修改行数权重 (新增)
+    "total_commits": 1,       # 历史提交权重 (保持不变)
+    "total_lines": 0.05       # 历史修改行数权重 (新增)
+}
 
 # 性能优化配置
 CACHE_EXPIRY_HOURS = 24  # 缓存过期时间（小时）

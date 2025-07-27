@@ -1,6 +1,6 @@
 """
-Git Merge Orchestrator - Git操作管理
-负责所有Git命令的执行和分支操作
+Git Merge Orchestrator - Git操作管理（修改行数增强版）
+负责所有Git命令的执行和分支操作，支持修改行数统计
 """
 
 import subprocess
@@ -14,7 +14,7 @@ from config import (
 
 
 class GitOperations:
-    """Git操作管理类"""
+    """Git操作管理类 - 支持修改行数统计"""
 
     def __init__(self, repo_path="."):
         self.repo_path = Path(repo_path)
@@ -99,8 +99,9 @@ class GitOperations:
 
         return merge_result
 
+    # === 原有方法（向后兼容） ===
     def get_contributors_since(self, file_path, since_date):
-        """获取指定日期以来的文件贡献者"""
+        """获取指定日期以来的文件贡献者（仅提交次数，向后兼容）"""
         cmd = f'git log --follow --since="{since_date}" --format="%an" -- "{file_path}"'
         result = self.run_command(cmd)
 
@@ -116,7 +117,7 @@ class GitOperations:
         return author_counts
 
     def get_all_contributors(self, file_path):
-        """获取文件的所有历史贡献者"""
+        """获取文件的所有历史贡献者（仅提交次数，向后兼容）"""
         cmd = f'git log --follow --format="%an" -- "{file_path}"'
         result = self.run_command(cmd)
 
@@ -131,6 +132,125 @@ class GitOperations:
 
         return author_counts
 
+    # === 新增方法（支持修改行数） ===
+    def get_contributors_with_lines_since(self, file_path, since_date):
+        """获取指定日期以来的文件贡献者（包含提交次数和修改行数）"""
+        try:
+            # 使用--numstat获取每次提交的行数统计
+            cmd = f'git log --follow --since="{since_date}" --format="%an|%H" --numstat -- "{file_path}"'
+            result = self.run_command(cmd)
+
+            if not result:
+                return {}
+
+            contributors = {}
+            lines = result.split("\n")
+            current_author = None
+
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+
+                if "|" in line and len(line.split("|")) == 2:
+                    # 这是作者和提交hash行
+                    author, commit_hash = line.split("|")
+                    current_author = author.strip()
+
+                    if current_author not in contributors:
+                        contributors[current_author] = {
+                            "commits": 0,
+                            "lines_added": 0,
+                            "lines_deleted": 0,
+                            "total_lines": 0,
+                        }
+                    contributors[current_author]["commits"] += 1
+
+                elif current_author and "\t" in line:
+                    # 这是numstat行：added\tdeleted\tfilename
+                    parts = line.split("\t")
+                    if len(parts) >= 3:
+                        # 检查文件名是否匹配（考虑文件重命名）
+                        filename = parts[2]
+                        if filename == file_path or filename.endswith(file_path.split("/")[-1]):
+                            try:
+                                added = int(parts[0]) if parts[0] != "-" else 0
+                                deleted = int(parts[1]) if parts[1] != "-" else 0
+                                contributors[current_author]["lines_added"] += added
+                                contributors[current_author]["lines_deleted"] += deleted
+                                contributors[current_author]["total_lines"] += added + deleted
+                            except ValueError:
+                                # 忽略无法解析的行数（如二进制文件）
+                                pass
+
+            return contributors
+
+        except Exception as e:
+            print(f"获取文件 {file_path} 的详细贡献统计时出错: {e}")
+            # 回退到基础方法
+            basic_contributors = self.get_contributors_since(file_path, since_date)
+            return {
+                author: {"commits": count, "lines_added": 0, "lines_deleted": 0, "total_lines": 0}
+                for author, count in basic_contributors.items()
+            }
+
+    def get_all_contributors_with_lines(self, file_path):
+        """获取文件的所有历史贡献者（包含提交次数和修改行数）"""
+        try:
+            cmd = f'git log --follow --format="%an|%H" --numstat -- "{file_path}"'
+            result = self.run_command(cmd)
+
+            if not result:
+                return {}
+
+            contributors = {}
+            lines = result.split("\n")
+            current_author = None
+
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+
+                if "|" in line and len(line.split("|")) == 2:
+                    author, commit_hash = line.split("|")
+                    current_author = author.strip()
+
+                    if current_author not in contributors:
+                        contributors[current_author] = {
+                            "commits": 0,
+                            "lines_added": 0,
+                            "lines_deleted": 0,
+                            "total_lines": 0,
+                        }
+                    contributors[current_author]["commits"] += 1
+
+                elif current_author and "\t" in line:
+                    parts = line.split("\t")
+                    if len(parts) >= 3:
+                        filename = parts[2]
+                        if filename == file_path or filename.endswith(file_path.split("/")[-1]):
+                            try:
+                                added = int(parts[0]) if parts[0] != "-" else 0
+                                deleted = int(parts[1]) if parts[1] != "-" else 0
+                                contributors[current_author]["lines_added"] += added
+                                contributors[current_author]["lines_deleted"] += deleted
+                                contributors[current_author]["total_lines"] += added + deleted
+                            except ValueError:
+                                pass
+
+            return contributors
+
+        except Exception as e:
+            print(f"获取文件 {file_path} 的历史详细统计时出错: {e}")
+            # 回退到基础方法
+            basic_contributors = self.get_all_contributors(file_path)
+            return {
+                author: {"commits": count, "lines_added": 0, "lines_deleted": 0, "total_lines": 0}
+                for author, count in basic_contributors.items()
+            }
+
+    # === 其他方法保持不变 ===
     def get_active_contributors(self, months=3):
         """获取近N个月有提交的活跃贡献者列表"""
         cutoff_date = (datetime.now() - timedelta(days=months * 30)).strftime("%Y-%m-%d")

@@ -1,6 +1,6 @@
 """
-Git Merge Orchestrator - 贡献者分析模块
-负责分析文件和目录的贡献者，评估活跃度和推荐分配
+Git Merge Orchestrator - 贡献者分析模块（修改行数增强版）
+负责分析文件和目录的贡献者，结合提交次数和修改行数评估活跃度
 """
 
 from datetime import datetime, timedelta
@@ -8,7 +8,7 @@ from config import SCORING_WEIGHTS, DEFAULT_ANALYSIS_MONTHS, DEFAULT_ACTIVE_MONT
 
 
 class ContributorAnalyzer:
-    """贡献者分析器"""
+    """贡献者分析器 - 支持修改行数统计"""
 
     def __init__(self, git_ops):
         self.git_ops = git_ops
@@ -37,50 +37,122 @@ class ContributorAnalyzer:
         return all_contributors
 
     def analyze_file_contributors(self, filepath, include_recent=True):
-        """分析文件的主要贡献者（重点关注一年内的贡献）"""
+        """分析文件的主要贡献者（综合提交次数和修改行数）"""
         try:
             contributors = {}
 
-            # 获取一年内的贡献统计 (重点)
+            # 获取一年内的详细贡献统计（包含修改行数）
             if include_recent:
                 one_year_ago = (datetime.now() - timedelta(days=DEFAULT_ANALYSIS_MONTHS * 30)).strftime("%Y-%m-%d")
-                recent_contributors = self.git_ops.get_contributors_since(filepath, one_year_ago)
+                recent_contributors = self.git_ops.get_contributors_with_lines_since(filepath, one_year_ago)
 
-                for author, count in recent_contributors.items():
+                for author, stats in recent_contributors.items():
+                    # 使用新的综合评分算法
+                    recent_score = (
+                        stats["commits"] * SCORING_WEIGHTS["recent_commits"]
+                        + stats["total_lines"] * SCORING_WEIGHTS["recent_lines"]
+                    )
+
                     contributors[author] = {
-                        "total_commits": count,
-                        "recent_commits": count,
-                        "score": count * SCORING_WEIGHTS["recent_commits"],
+                        "total_commits": stats["commits"],
+                        "recent_commits": stats["commits"],
+                        "total_lines": stats["total_lines"],
+                        "recent_lines": stats["total_lines"],
+                        "recent_lines_added": stats["lines_added"],
+                        "recent_lines_deleted": stats["lines_deleted"],
+                        "score": recent_score,
                     }
 
-            # 获取总体贡献统计 (补充)
-            all_contributors = self.git_ops.get_all_contributors(filepath)
+            # 获取历史总体贡献统计（包含修改行数）
+            all_contributors = self.git_ops.get_all_contributors_with_lines(filepath)
 
-            for author, count in all_contributors.items():
+            for author, stats in all_contributors.items():
                 if author in contributors:
-                    contributors[author]["total_commits"] = count
+                    # 更新历史统计
+                    contributors[author]["total_commits"] = stats["commits"]
+                    contributors[author]["total_lines"] = stats["total_lines"]
+                    contributors[author]["total_lines_added"] = stats["lines_added"]
+                    contributors[author]["total_lines_deleted"] = stats["lines_deleted"]
+
+                    # 重新计算综合评分
                     contributors[author]["score"] = (
                         contributors[author]["recent_commits"] * SCORING_WEIGHTS["recent_commits"]
-                        + count * SCORING_WEIGHTS["total_commits"]
+                        + contributors[author]["recent_lines"] * SCORING_WEIGHTS["recent_lines"]
+                        + stats["commits"] * SCORING_WEIGHTS["total_commits"]
+                        + stats["total_lines"] * SCORING_WEIGHTS["total_lines"]
                     )
                 else:
+                    # 仅有历史贡献，无近期贡献
+                    historical_score = (
+                        stats["commits"] * SCORING_WEIGHTS["total_commits"]
+                        + stats["total_lines"] * SCORING_WEIGHTS["total_lines"]
+                    )
+
                     contributors[author] = {
-                        "total_commits": count,
+                        "total_commits": stats["commits"],
                         "recent_commits": 0,
-                        "score": count * SCORING_WEIGHTS["total_commits"],
+                        "total_lines": stats["total_lines"],
+                        "recent_lines": 0,
+                        "total_lines_added": stats["lines_added"],
+                        "total_lines_deleted": stats["lines_deleted"],
+                        "recent_lines_added": 0,
+                        "recent_lines_deleted": 0,
+                        "score": historical_score,
                     }
 
             return contributors
+
         except Exception as e:
             print(f"分析文件 {filepath} 时出错: {e}")
-            return {}
+            print(f"🔄 回退到基础分析模式...")
+
+            # 回退到原有的基础分析方法
+            try:
+                contributors = {}
+
+                # 使用原有方法获取基础统计
+                if include_recent:
+                    one_year_ago = (datetime.now() - timedelta(days=DEFAULT_ANALYSIS_MONTHS * 30)).strftime("%Y-%m-%d")
+                    recent_contributors = self.git_ops.get_contributors_since(filepath, one_year_ago)
+
+                    for author, count in recent_contributors.items():
+                        contributors[author] = {
+                            "total_commits": count,
+                            "recent_commits": count,
+                            "total_lines": 0,
+                            "recent_lines": 0,
+                            "score": count * SCORING_WEIGHTS["recent_commits"],
+                        }
+
+                all_contributors = self.git_ops.get_all_contributors(filepath)
+                for author, count in all_contributors.items():
+                    if author in contributors:
+                        contributors[author]["total_commits"] = count
+                        contributors[author]["score"] = (
+                            contributors[author]["recent_commits"] * SCORING_WEIGHTS["recent_commits"]
+                            + count * SCORING_WEIGHTS["total_commits"]
+                        )
+                    else:
+                        contributors[author] = {
+                            "total_commits": count,
+                            "recent_commits": 0,
+                            "total_lines": 0,
+                            "recent_lines": 0,
+                            "score": count * SCORING_WEIGHTS["total_commits"],
+                        }
+
+                return contributors
+
+            except Exception as fallback_error:
+                print(f"基础分析也失败: {fallback_error}")
+                return {}
 
     def analyze_directory_contributors(self, directory_path, include_recent=True):
         """分析目录级别的主要贡献者"""
         return self.git_ops.get_directory_contributors(directory_path, include_recent)
 
     def get_group_main_contributor(self, files):
-        """获取文件组的主要贡献者（重点基于一年内贡献）"""
+        """获取文件组的主要贡献者（基于综合评分）"""
         all_contributors = {}
 
         for file in files:
@@ -90,19 +162,24 @@ class ContributorAnalyzer:
                     all_contributors[author] = {
                         "total_commits": 0,
                         "recent_commits": 0,
+                        "total_lines": 0,
+                        "recent_lines": 0,
                         "score": 0,
                         "file_count": 0,
                     }
 
-                all_contributors[author]["total_commits"] += stats["total_commits"]
-                all_contributors[author]["recent_commits"] += stats["recent_commits"]
-                all_contributors[author]["score"] += stats["score"]
+                # 累加统计
+                all_contributors[author]["total_commits"] += stats.get("total_commits", 0)
+                all_contributors[author]["recent_commits"] += stats.get("recent_commits", 0)
+                all_contributors[author]["total_lines"] += stats.get("total_lines", 0)
+                all_contributors[author]["recent_lines"] += stats.get("recent_lines", 0)
+                all_contributors[author]["score"] += stats.get("score", 0)
                 all_contributors[author]["file_count"] += 1
 
         if not all_contributors:
             return None, {}
 
-        # 返回综合得分最高的作者（重点是近期贡献）
+        # 返回综合得分最高的作者
         main_contributor = max(all_contributors.items(), key=lambda x: x[1]["score"])
         return main_contributor[0], all_contributors
 
@@ -138,7 +215,7 @@ class ContributorAnalyzer:
                     # 返回评分最高的活跃贡献者
                     best_contributor = max(active_dir_contributors.items(), key=lambda x: x[1]["score"])
                     print(
-                        f"  ✅ 在目录 {directory} 找到候选人: {best_contributor[0]} (得分: {best_contributor[1]['score']})"
+                        f"  ✅ 在目录 {directory} 找到候选人: {best_contributor[0]} (得分: {best_contributor[1]['score']:.1f})"
                     )
                     return best_contributor[0], best_contributor[1], directory
 
@@ -152,7 +229,7 @@ class ContributorAnalyzer:
 
             if active_root_contributors:
                 best_contributor = max(active_root_contributors.items(), key=lambda x: x[1]["score"])
-                print(f"  ✅ 在根目录找到候选人: {best_contributor[0]} (得分: {best_contributor[1]['score']})")
+                print(f"  ✅ 在根目录找到候选人: {best_contributor[0]} (得分: {best_contributor[1]['score']:.1f})")
                 return best_contributor[0], best_contributor[1], "根目录"
 
         print("  ❌ 未找到合适的候选人")
@@ -173,7 +250,7 @@ class ContributorAnalyzer:
             return "recent"
 
     def calculate_global_contributor_stats(self, plan):
-        """计算全局贡献者统计"""
+        """计算全局贡献者统计（支持修改行数）"""
         all_contributors_global = {}
 
         for group in plan["groups"]:
@@ -183,6 +260,8 @@ class ContributorAnalyzer:
                     all_contributors_global[author] = {
                         "total_commits": 0,
                         "recent_commits": 0,
+                        "total_lines": 0,
+                        "recent_lines": 0,
                         "score": 0,
                         "groups_contributed": 0,
                         "groups_assigned": [],
@@ -190,9 +269,11 @@ class ContributorAnalyzer:
                     }
 
                 if isinstance(stats, dict):
-                    all_contributors_global[author]["recent_commits"] += stats["recent_commits"]
-                    all_contributors_global[author]["total_commits"] += stats["total_commits"]
-                    all_contributors_global[author]["score"] += stats["score"]
+                    all_contributors_global[author]["recent_commits"] += stats.get("recent_commits", 0)
+                    all_contributors_global[author]["total_commits"] += stats.get("total_commits", 0)
+                    all_contributors_global[author]["total_lines"] += stats.get("total_lines", 0)
+                    all_contributors_global[author]["recent_lines"] += stats.get("recent_lines", 0)
+                    all_contributors_global[author]["score"] += stats.get("score", 0)
                 else:
                     all_contributors_global[author]["total_commits"] += stats
                     all_contributors_global[author]["score"] += stats

@@ -23,9 +23,7 @@ class OptimizedContributorAnalyzer:
 
     def __init__(self, git_ops):
         self.git_ops = git_ops
-        self.cache_file = (
-            Path(git_ops.repo_path) / ".merge_work" / "contributor_cache.json"
-        )
+        self.cache_file = Path(git_ops.repo_path) / ".merge_work" / "contributor_cache.json"
         self.cache_lock = threading.Lock()
 
         # 内存缓存
@@ -46,16 +44,10 @@ class OptimizedContributorAnalyzer:
                     cache_data = json.load(f)
 
                 # 检查缓存有效性（24小时）
-                cache_time = datetime.fromisoformat(
-                    cache_data.get("created_at", "2000-01-01")
-                )
+                cache_time = datetime.fromisoformat(cache_data.get("created_at", "2000-01-01"))
                 if datetime.now() - cache_time < timedelta(hours=24):
-                    self._file_contributors_cache = cache_data.get(
-                        "file_contributors", {}
-                    )
-                    self._directory_contributors_cache = cache_data.get(
-                        "directory_contributors", {}
-                    )
+                    self._file_contributors_cache = cache_data.get("file_contributors", {})
+                    self._directory_contributors_cache = cache_data.get("directory_contributors", {})
                     print(f"✅ 已加载贡献者缓存 ({len(self._file_contributors_cache)} 文件)")
                     return True
                 else:
@@ -96,9 +88,7 @@ class OptimizedContributorAnalyzer:
         for file_path in file_list:
             cache_key = self._get_file_cache_key(file_path)
             if cache_key in self._file_contributors_cache:
-                self._batch_file_data[file_path] = self._file_contributors_cache[
-                    cache_key
-                ]
+                self._batch_file_data[file_path] = self._file_contributors_cache[cache_key]
                 cached_files.add(file_path)
             else:
                 uncached_files.append(file_path)
@@ -114,9 +104,7 @@ class OptimizedContributorAnalyzer:
         print(f"🔍 需要分析 {len(uncached_files)} 个新文件")
 
         # 分离可能需要follow的文件和普通文件
-        critical_files, regular_files = self._classify_files_for_analysis(
-            uncached_files
-        )
+        critical_files, regular_files = self._classify_files_for_analysis(uncached_files)
 
         if critical_files:
             print(f"🎯 发现 {len(critical_files)} 个关键文件，将使用深度分析（--follow）")
@@ -158,9 +146,9 @@ class OptimizedContributorAnalyzer:
         # 检测可能被重命名的文件（启发式方法）
         for file_path in file_list:
             # 关键文件类型或重要路径使用深度分析
-            if file_path.endswith(
-                (".py", ".js", ".ts", ".java", ".cpp", ".c", ".h")
-            ) and ("core" in file_path or "main" in file_path or "index" in file_path):
+            if file_path.endswith((".py", ".js", ".ts", ".java", ".cpp", ".c", ".h")) and (
+                "core" in file_path or "main" in file_path or "index" in file_path
+            ):
                 critical_files.append(file_path)
             else:
                 regular_files.append(file_path)
@@ -173,9 +161,7 @@ class OptimizedContributorAnalyzer:
             contributors = {}
 
             # 获取一年内的贡献统计（使用--follow）
-            one_year_ago = (
-                datetime.now() - timedelta(days=DEFAULT_ANALYSIS_MONTHS * 30)
-            ).strftime("%Y-%m-%d")
+            one_year_ago = (datetime.now() - timedelta(days=DEFAULT_ANALYSIS_MONTHS * 30)).strftime("%Y-%m-%d")
 
             recent_cmd = f'git log --follow --since="{one_year_ago}" --format="%an" -- "{filepath}"'
             recent_result = self.git_ops.run_command(recent_cmd)
@@ -185,9 +171,7 @@ class OptimizedContributorAnalyzer:
                 recent_author_counts = {}
                 for author in recent_authors:
                     if author.strip():
-                        recent_author_counts[author] = (
-                            recent_author_counts.get(author, 0) + 1
-                        )
+                        recent_author_counts[author] = recent_author_counts.get(author, 0) + 1
 
                 for author, count in recent_author_counts.items():
                     contributors[author] = {
@@ -211,8 +195,7 @@ class OptimizedContributorAnalyzer:
                     if author in contributors:
                         contributors[author]["total_commits"] = count
                         contributors[author]["score"] = (
-                            contributors[author]["recent_commits"]
-                            * SCORING_WEIGHTS["recent_commits"]
+                            contributors[author]["recent_commits"] * SCORING_WEIGHTS["recent_commits"]
                             + count * SCORING_WEIGHTS["total_commits"]
                         )
                     else:
@@ -232,9 +215,7 @@ class OptimizedContributorAnalyzer:
         print(f"📊 开始批量分析 {len(file_list)} 个文件")
 
         batch_results = {}
-        one_year_ago = (
-            datetime.now() - timedelta(days=DEFAULT_ANALYSIS_MONTHS * 30)
-        ).strftime("%Y-%m-%d")
+        one_year_ago = (datetime.now() - timedelta(days=DEFAULT_ANALYSIS_MONTHS * 30)).strftime("%Y-%m-%d")
 
         # 分批处理，避免命令行过长
         batch_size = 20  # 减小批量大小，提高准确性
@@ -247,9 +228,7 @@ class OptimizedContributorAnalyzer:
             print(f"  📦 处理批次 {batch_num}/{total_batches} ({len(batch_files)} 文件)")
 
             # 获取近期贡献者（简化格式）
-            recent_contributors = self._get_batch_contributors(
-                batch_files, one_year_ago
-            )
+            recent_contributors = self._get_batch_contributors(batch_files, one_year_ago)
 
             # 获取历史贡献者（简化格式）
             total_contributors = self._get_batch_contributors(batch_files, None)
@@ -273,8 +252,7 @@ class OptimizedContributorAnalyzer:
                     if author in contributors:
                         contributors[author]["total_commits"] = count
                         contributors[author]["score"] = (
-                            contributors[author]["recent_commits"]
-                            * SCORING_WEIGHTS["recent_commits"]
+                            contributors[author]["recent_commits"] * SCORING_WEIGHTS["recent_commits"]
                             + count * SCORING_WEIGHTS["total_commits"]
                         )
                     else:
@@ -354,10 +332,7 @@ class OptimizedContributorAnalyzer:
         # 并行处理每个组
         results = {}
         with ThreadPoolExecutor(max_workers=min(4, len(groups))) as executor:
-            future_to_group = {
-                executor.submit(self._analyze_single_group, group): group
-                for group in groups
-            }
+            future_to_group = {executor.submit(self._analyze_single_group, group): group for group in groups}
 
             for future in as_completed(future_to_group):
                 group = future_to_group[future]
@@ -432,9 +407,7 @@ class OptimizedContributorAnalyzer:
 
         with ThreadPoolExecutor(max_workers=3) as executor:
             future_to_dir = {
-                executor.submit(
-                    self._analyze_single_directory, dir_path, one_year_ago
-                ): dir_path
+                executor.submit(self._analyze_single_directory, dir_path, one_year_ago): dir_path
                 for dir_path in uncached_dirs
             }
 
@@ -463,9 +436,7 @@ class OptimizedContributorAnalyzer:
             recent_author_counts = {}
             for author in recent_authors:
                 if author.strip():
-                    recent_author_counts[author] = (
-                        recent_author_counts.get(author, 0) + 1
-                    )
+                    recent_author_counts[author] = recent_author_counts.get(author, 0) + 1
 
             for author, count in recent_author_counts.items():
                 contributors[author] = {
@@ -488,9 +459,7 @@ class OptimizedContributorAnalyzer:
             for author, count in author_counts.items():
                 if author in contributors:
                     contributors[author]["total_commits"] = count
-                    contributors[author]["score"] = (
-                        contributors[author]["recent_commits"] * 3 + count
-                    )
+                    contributors[author]["score"] = contributors[author]["recent_commits"] * 3 + count
                 else:
                     contributors[author] = {
                         "total_commits": count,
@@ -527,9 +496,7 @@ class OptimizedContributorAnalyzer:
                     directories_to_check.add(parent_dir)
 
         # 按目录层级排序
-        sorted_dirs = sorted(
-            directories_to_check, key=lambda x: x.count("/"), reverse=True
-        )
+        sorted_dirs = sorted(directories_to_check, key=lambda x: x.count("/"), reverse=True)
 
         # 批量分析目录
         dir_contributors = self.batch_analyze_directories(sorted_dirs)
@@ -541,15 +508,11 @@ class OptimizedContributorAnalyzer:
 
             if contributors:
                 active_dir_contributors = {
-                    author: stats
-                    for author, stats in contributors.items()
-                    if author in active_contributors
+                    author: stats for author, stats in contributors.items() if author in active_contributors
                 }
 
                 if active_dir_contributors:
-                    best_contributor = max(
-                        active_dir_contributors.items(), key=lambda x: x[1]["score"]
-                    )
+                    best_contributor = max(active_dir_contributors.items(), key=lambda x: x[1]["score"])
                     print(
                         f"  ✅ 在目录 {directory} 找到候选人: {best_contributor[0]} (得分: {best_contributor[1]['score']})"
                     )
@@ -560,18 +523,12 @@ class OptimizedContributorAnalyzer:
         root_contributors = dir_contributors.get(".", {})
         if root_contributors:
             active_root_contributors = {
-                author: stats
-                for author, stats in root_contributors.items()
-                if author in active_contributors
+                author: stats for author, stats in root_contributors.items() if author in active_contributors
             }
 
             if active_root_contributors:
-                best_contributor = max(
-                    active_root_contributors.items(), key=lambda x: x[1]["score"]
-                )
-                print(
-                    f"  ✅ 在根目录找到候选人: {best_contributor[0]} (得分: {best_contributor[1]['score']})"
-                )
+                best_contributor = max(active_root_contributors.items(), key=lambda x: x[1]["score"])
+                print(f"  ✅ 在根目录找到候选人: {best_contributor[0]} (得分: {best_contributor[1]['score']})")
                 return best_contributor[0], best_contributor[1], "根目录"
 
         print("  ❌ 未找到合适的候选人")
@@ -635,12 +592,8 @@ class OptimizedContributorAnalyzer:
                     }
 
                 if isinstance(stats, dict):
-                    all_contributors_global[author]["recent_commits"] += stats[
-                        "recent_commits"
-                    ]
-                    all_contributors_global[author]["total_commits"] += stats[
-                        "total_commits"
-                    ]
+                    all_contributors_global[author]["recent_commits"] += stats["recent_commits"]
+                    all_contributors_global[author]["total_commits"] += stats["total_commits"]
                     all_contributors_global[author]["score"] += stats["score"]
                 else:
                     all_contributors_global[author]["total_commits"] += stats
@@ -650,9 +603,7 @@ class OptimizedContributorAnalyzer:
 
                 # 检查是否被分配到这个组
                 if group.get("assignee") == author:
-                    all_contributors_global[author]["groups_assigned"].append(
-                        group["name"]
-                    )
+                    all_contributors_global[author]["groups_assigned"].append(group["name"])
 
         return all_contributors_global
 
@@ -673,9 +624,7 @@ class OptimizedContributorAnalyzer:
                         "fallback": 0,
                     }
                 assignee_workload[assignee]["groups"] += 1
-                assignee_workload[assignee]["files"] += group.get(
-                    "file_count", len(group.get("files", []))
-                )
+                assignee_workload[assignee]["files"] += group.get("file_count", len(group.get("files", [])))
                 if group.get("status") == "completed":
                     assignee_workload[assignee]["completed"] += 1
                 if group.get("fallback_reason"):
@@ -697,3 +646,107 @@ class OptimizedContributorAnalyzer:
             reason_stats[reason_type].append(group)
 
         return reason_stats
+
+    def _analyze_single_file_with_follow(self, filepath):
+        """单文件深度分析（支持重命名跟踪和修改行数统计）"""
+        try:
+            contributors = {}
+
+            # 获取一年内的贡献统计（使用修改行数增强版）
+            one_year_ago = (datetime.now() - timedelta(days=DEFAULT_ANALYSIS_MONTHS * 30)).strftime("%Y-%m-%d")
+
+            try:
+                # 尝试使用增强版方法（包含修改行数）
+                recent_contributors = self.git_ops.get_contributors_with_lines_since(filepath, one_year_ago)
+
+                for author, stats in recent_contributors.items():
+                    contributors[author] = {
+                        "total_commits": stats["commits"],
+                        "recent_commits": stats["commits"],
+                        "total_lines": stats["total_lines"],
+                        "recent_lines": stats["total_lines"],
+                        "score": (
+                            stats["commits"] * SCORING_WEIGHTS["recent_commits"]
+                            + stats["total_lines"] * SCORING_WEIGHTS["recent_lines"]
+                        ),
+                    }
+            except Exception as e:
+                print(f"    使用基础统计方法（文件 {filepath}）: {e}")
+                # 回退到基础方法
+                recent_cmd = f'git log --follow --since="{one_year_ago}" --format="%an" -- "{filepath}"'
+                recent_result = self.git_ops.run_command(recent_cmd)
+
+                if recent_result:
+                    recent_authors = recent_result.split("\n")
+                    recent_author_counts = {}
+                    for author in recent_authors:
+                        if author.strip():
+                            recent_author_counts[author] = recent_author_counts.get(author, 0) + 1
+
+                    for author, count in recent_author_counts.items():
+                        contributors[author] = {
+                            "total_commits": count,
+                            "recent_commits": count,
+                            "total_lines": 0,
+                            "recent_lines": 0,
+                            "score": count * SCORING_WEIGHTS["recent_commits"],
+                        }
+
+            # 获取总体贡献统计（使用修改行数增强版）
+            try:
+                all_contributors = self.git_ops.get_all_contributors_with_lines(filepath)
+
+                for author, stats in all_contributors.items():
+                    if author in contributors:
+                        contributors[author]["total_commits"] = stats["commits"]
+                        contributors[author]["total_lines"] = stats["total_lines"]
+                        contributors[author]["score"] = (
+                            contributors[author]["recent_commits"] * SCORING_WEIGHTS["recent_commits"]
+                            + contributors[author]["recent_lines"] * SCORING_WEIGHTS["recent_lines"]
+                            + stats["commits"] * SCORING_WEIGHTS["total_commits"]
+                            + stats["total_lines"] * SCORING_WEIGHTS["total_lines"]
+                        )
+                    else:
+                        contributors[author] = {
+                            "total_commits": stats["commits"],
+                            "recent_commits": 0,
+                            "total_lines": stats["total_lines"],
+                            "recent_lines": 0,
+                            "score": (
+                                stats["commits"] * SCORING_WEIGHTS["total_commits"]
+                                + stats["total_lines"] * SCORING_WEIGHTS["total_lines"]
+                            ),
+                        }
+            except Exception as e:
+                print(f"    使用基础历史统计（文件 {filepath}）: {e}")
+                # 回退到基础方法
+                total_cmd = f'git log --follow --format="%an" -- "{filepath}"'
+                total_result = self.git_ops.run_command(total_cmd)
+
+                if total_result:
+                    authors = total_result.split("\n")
+                    author_counts = {}
+                    for author in authors:
+                        if author.strip():
+                            author_counts[author] = author_counts.get(author, 0) + 1
+
+                    for author, count in author_counts.items():
+                        if author in contributors:
+                            contributors[author]["total_commits"] = count
+                            contributors[author]["score"] = (
+                                contributors[author]["recent_commits"] * SCORING_WEIGHTS["recent_commits"]
+                                + count * SCORING_WEIGHTS["total_commits"]
+                            )
+                        else:
+                            contributors[author] = {
+                                "total_commits": count,
+                                "recent_commits": 0,
+                                "total_lines": 0,
+                                "recent_lines": 0,
+                                "score": count * SCORING_WEIGHTS["total_commits"],
+                            }
+
+            return contributors
+        except Exception as e:
+            print(f"深度分析文件 {filepath} 时出错: {e}")
+            return {}

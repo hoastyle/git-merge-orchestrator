@@ -22,19 +22,19 @@ class OptimizedTaskAssigner:
         max_tasks_per_person=DEFAULT_MAX_TASKS_PER_PERSON,
         include_fallback=True,
     ):
-        """涡轮增压版自动分配任务 - 显著提升性能"""
+        """涡轮增压版自动分配任务 - 基于修改行数+提交次数的综合评分"""
         exclude_authors = exclude_authors or []
         start_time = datetime.now()
 
         print("🚀 启动涡轮增压自动分配模式...")
         print("⚡ 正在进行性能优化预处理...")
+        print("💡 新评分算法: 近期提交×2 + 近期行数×0.1 + 历史提交×1 + 历史行数×0.05")
 
         # 加载持久化缓存
         cache_loaded = self.contributor_analyzer.load_persistent_cache()
         if cache_loaded:
             print("📦 成功加载贡献者缓存，大幅提升分析速度")
 
-        print("💡 评分规则：一年内提交数 × 3 + 历史提交数 × 1")
         print("🔍 自动排除近3个月无提交的人员")
 
         # Step 1: 批量获取活跃贡献者（优化）
@@ -54,15 +54,15 @@ class OptimizedTaskAssigner:
         # 合并排除列表
         all_excluded = set(exclude_authors) | inactive_contributors
 
-        # Step 3: 并行分析所有组的贑献者信息（核心优化）
-        print(f"⚡ 开始并行分析 {len(plan['groups'])} 个组的贡献者...")
+        # Step 3: 并行分析所有组的贡献者信息（核心优化 - 支持修改行数）
+        print(f"⚡ 开始并行分析 {len(plan['groups'])} 个组的贡献者（包含修改行数统计）...")
         group_analysis_results = self.contributor_analyzer.parallel_analyze_groups(plan["groups"])
 
         # Step 4: 快速分配任务
         assignment_count = {}
         unassigned_groups = []
 
-        print(f"🎯 开始智能任务分配...")
+        print(f"🎯 开始智能任务分配（基于综合评分）...")
 
         for group in plan["groups"]:
             group_name = group["name"]
@@ -76,15 +76,15 @@ class OptimizedTaskAssigner:
             assigned = False
             assignment_reason = ""
 
-            # 主要分配逻辑（优化版）
+            # 主要分配逻辑（优化版 - 支持综合评分）
             if main_contributor and main_contributor not in all_excluded:
                 current_count = assignment_count.get(main_contributor, 0)
                 if current_count < max_tasks_per_person:
                     group["assignee"] = main_contributor
                     assignment_count[main_contributor] = current_count + 1
                     stats = all_contributors[main_contributor]
-                    assignment_reason = f"基于文件贡献度直接分配 (一年内:{stats['recent_commits']}, 历史:{stats['total_commits']}, 得分:{stats['score']})"
-                    print(f"    ✅ 分配给: {main_contributor} (得分: {stats['score']})")
+                    assignment_reason = f"基于综合贡献度直接分配 (近期提交:{stats.get('recent_commits', 0)}, 近期行数:{stats.get('recent_lines', 0)}, 历史提交:{stats.get('total_commits', 0)}, 历史行数:{stats.get('total_lines', 0)}, 综合得分:{stats.get('score', 0):.1f})"
+                    print(f"    ✅ 分配给: {main_contributor} (综合得分: {stats.get('score', 0):.1f})")
                     assigned = True
                 else:
                     # 负载均衡：寻找第二候选人
@@ -132,6 +132,7 @@ class OptimizedTaskAssigner:
         print(f"   - 缓存文件数: {perf_stats['cached_files']}")
         print(f"   - 缓存目录数: {perf_stats['cached_directories']}")
         print(f"   - 批量计算: {'✅' if perf_stats['batch_computed'] else '❌'}")
+        print(f"💡 算法升级: 综合评分 = 提交次数 + 修改行数")
 
         return {
             "assignment_count": assignment_count,

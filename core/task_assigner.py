@@ -19,11 +19,11 @@ class TaskAssigner:
         max_tasks_per_person=DEFAULT_MAX_TASKS_PER_PERSON,
         include_fallback=True,
     ):
-        """基于一年内贡献度自动分配合并任务，支持备选方案和活跃度过滤"""
+        """基于综合贡献度（提交次数+修改行数）自动分配合并任务，支持备选方案和活跃度过滤"""
         exclude_authors = exclude_authors or []
 
-        print("🤖 正在基于一年内贡献度自动分配任务...")
-        print("💡 评分规则：一年内提交数 × 3 + 历史提交数 × 1")
+        print("🤖 正在基于综合贡献度（提交次数+修改行数）自动分配任务...")
+        print("💡 评分规则：近期提交×2 + 近期行数×0.1 + 历史提交×1 + 历史行数×0.05")
         print("🔍 自动排除近3个月无提交的人员")
 
         # 获取活跃贡献者
@@ -49,7 +49,7 @@ class TaskAssigner:
         for group in plan["groups"]:
             print(f"\n分析组: {group['name']} ({group['file_count']} 个文件)")
 
-            # 获取主要贡献者（重点关注一年内）
+            # 获取主要贡献者（基于综合评分）
             main_contributor, all_contributors = self.contributor_analyzer.get_group_main_contributor(group["files"])
 
             assigned = False
@@ -62,10 +62,10 @@ class TaskAssigner:
                     group["assignee"] = main_contributor
                     assignment_count[main_contributor] = current_count + 1
                     stats = all_contributors[main_contributor]
-                    assignment_reason = f"基于文件贡献度直接分配 (一年内:{stats['recent_commits']}, 历史:{stats['total_commits']}, 得分:{stats['score']})"
+                    assignment_reason = f"基于综合贡献度直接分配 (近期提交:{stats.get('recent_commits', 0)}, 近期行数:{stats.get('recent_lines', 0)}, 历史提交:{stats.get('total_commits', 0)}, 历史行数:{stats.get('total_lines', 0)}, 综合得分:{stats.get('score', 0):.1f})"
                     print(f" ✅ 分配给: {main_contributor}")
                     print(
-                        f" 一年内提交: {stats['recent_commits']}, 历史提交: {stats['total_commits']}, 综合得分: {stats['score']}"
+                        f" 综合统计: 近期提交{stats.get('recent_commits', 0)}, 近期行数{stats.get('recent_lines', 0)}, 历史提交{stats.get('total_commits', 0)}, 历史行数{stats.get('total_lines', 0)}, 综合得分{stats.get('score', 0):.1f}"
                     )
                     assigned = True
                 else:
@@ -79,10 +79,10 @@ class TaskAssigner:
                         if author not in all_excluded and assignment_count.get(author, 0) < max_tasks_per_person:
                             group["assignee"] = author
                             assignment_count[author] = assignment_count.get(author, 0) + 1
-                            assignment_reason = f"负载均衡分配 (原推荐{main_contributor}已满负荷, 一年内:{stats['recent_commits']}, 历史:{stats['total_commits']}, 得分:{stats['score']})"
+                            assignment_reason = f"负载均衡分配 (原推荐{main_contributor}已满负荷, 近期提交:{stats.get('recent_commits', 0)}, 近期行数:{stats.get('recent_lines', 0)}, 历史提交:{stats.get('total_commits', 0)}, 历史行数:{stats.get('total_lines', 0)}, 综合得分:{stats.get('score', 0):.1f})"
                             print(f" ✅ 分配给: {author}")
                             print(
-                                f" 一年内提交: {stats['recent_commits']}, 历史提交: {stats['total_commits']}, 综合得分: {stats['score']}"
+                                f" 综合统计: 近期提交{stats.get('recent_commits', 0)}, 近期行数{stats.get('recent_lines', 0)}, 历史提交{stats.get('total_commits', 0)}, 历史行数{stats.get('total_lines', 0)}, 综合得分{stats.get('score', 0):.1f}"
                             )
                             print(f" (原推荐 {main_contributor} 已满负荷)")
                             assigned = True
@@ -101,11 +101,11 @@ class TaskAssigner:
                         group["assignee"] = fallback_assignee
                         assignment_count[fallback_assignee] = current_count + 1
                         group["fallback_reason"] = f"通过{fallback_source}目录分析分配"
-                        assignment_reason = f"备选目录分配 (来源:{fallback_source}, 一年内:{fallback_stats['recent_commits']}, 历史:{fallback_stats['total_commits']}, 得分:{fallback_stats['score']})"
-                        print(f" ✅ 备选分配给: {fallback_assignee} (来源: {fallback_source})")
-                        print(
-                            f" 目录贡献 - 一年内: {fallback_stats['recent_commits']}, 历史: {fallback_stats['total_commits']}, 得分: {fallback_stats['score']}"
+                        assignment_reason = (
+                            f"备选目录分配 (来源:{fallback_source}, 综合得分:{fallback_stats.get('score', 0):.1f})"
                         )
+                        print(f" ✅ 备选分配给: {fallback_assignee} (来源: {fallback_source})")
+                        print(f" 目录贡献 - 综合得分: {fallback_stats.get('score', 0):.1f}")
                         assigned = True
 
             if not assigned:
@@ -121,13 +121,13 @@ class TaskAssigner:
                             print(f" ⚠️ 主要贡献者 {main_contributor} 在手动排除列表中")
                             main_stats = all_contributors[main_contributor]
                             group["notes"] = (
-                                f"建议: {main_contributor} (近期:{main_stats['recent_commits']},历史:{main_stats['total_commits']},得分:{main_stats['score']}) 已手动排除"
+                                f"建议: {main_contributor} (综合得分:{main_stats.get('score', 0):.1f}) 已手动排除"
                             )
                     else:
                         assignment_reason = f"主要贡献者{main_contributor}已达最大任务数{max_tasks_per_person}"
                         main_stats = all_contributors[main_contributor]
                         group["notes"] = (
-                            f"建议: {main_contributor} (近期:{main_stats['recent_commits']},历史:{main_stats['total_commits']},得分:{main_stats['score']}) 但已达最大任务数"
+                            f"建议: {main_contributor} (综合得分:{main_stats.get('score', 0):.1f}) 但已达最大任务数"
                         )
                         print(f" ⚠️ 主要贡献者 {main_contributor} 已达最大任务数")
                 else:
