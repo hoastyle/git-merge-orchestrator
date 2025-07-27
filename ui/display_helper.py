@@ -224,13 +224,23 @@ class DisplayHelper:
 
     @staticmethod
     def categorize_assignment_reason(reason):
-        """将分配原因分类"""
+        """将分配原因分类 - 修复版，支持多关键词匹配"""
         if not reason or reason == "未指定":
             return "未指定"
 
-        for category, keyword in ASSIGNMENT_REASON_TYPES.items():
-            if keyword in reason:
-                return category
+        # 导入配置
+        from config import ASSIGNMENT_REASON_TYPES
+
+        # 遍历每个分类及其关键词列表
+        for category, keywords in ASSIGNMENT_REASON_TYPES.items():
+            # 支持向后兼容：如果是字符串就转为列表
+            if isinstance(keywords, str):
+                keywords = [keywords]
+
+            # 检查是否匹配任何一个关键词
+            for keyword in keywords:
+                if keyword in reason:
+                    return category
 
         return "其他"
 

@@ -119,7 +119,8 @@ class OptimizedTaskAssigner:
                 )
 
             # 保存分配信息
-            group["assignment_reason"] = assignment_reason
+            if not group.get("assignment_reason"):  # 只有当没有分配原因时才设置
+                group["assignment_reason"] = assignment_reason if assignment_reason else "未指定"
             group["contributors"] = all_contributors
 
         # 计算性能统计
