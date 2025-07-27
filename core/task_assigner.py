@@ -250,3 +250,25 @@ class TaskAssigner:
                 print(f" ⚠️ 无法重新分配组 {group['name']}")
 
         return plan
+
+    def _find_fallback_assignee(self, group, all_excluded, assignment_count, max_tasks_per_person):
+        """查找备选分配人员 - 修复版"""
+        # 尝试从目录级贡献者中找到备选
+        directory_path = "/".join(group["files"][0].split("/")[:-1]) if group["files"] else ""
+
+        if directory_path:
+            # 分析目录级贡献者
+            dir_contributors = self.contributor_analyzer.analyze_directory_contributors(directory_path)
+
+            # 按得分排序，查找可用的贡献者
+            for author, stats in sorted(dir_contributors.items(), key=lambda x: x[1].get("score", 0), reverse=True):
+                if author not in all_excluded and assignment_count.get(author, 0) < max_tasks_per_person:
+                    return author
+
+        # 如果目录级没找到，尝试根级
+        root_contributors = self.contributor_analyzer.analyze_directory_contributors(".")
+        for author, stats in sorted(root_contributors.items(), key=lambda x: x[1].get("score", 0), reverse=True):
+            if author not in all_excluded and assignment_count.get(author, 0) < max_tasks_per_person:
+                return author
+
+        return None

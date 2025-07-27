@@ -40,10 +40,11 @@ ASSIGNMENT_REASON_TYPES = {
 }
 
 # 显示格式配置
+# 显示格式配置
 TABLE_CONFIGS = {
     "status_overview": {
         "headers": ["组名", "文件数", "负责人", "状态", "分配类型", "推荐理由"],
-        "widths": [45, 8, 20, 8, 12, 35],
+        "widths": [45, 8, 20, 8, 12, 50],
         "aligns": ["left", "center", "left", "center", "left", "left"],
     },
     "group_list": {
@@ -58,12 +59,12 @@ TABLE_CONFIGS = {
     },
     "assignment_reasons": {
         "headers": ["组名", "负责人", "文件数", "分配类型", "详细原因"],
-        "widths": [45, 20, 8, 18, 45],
+        "widths": [45, 20, 8, 18, 60],
         "aligns": ["left", "left", "center", "left", "left"],
     },
     "assignee_tasks": {
         "headers": ["组名", "文件数", "状态", "类型", "分配原因"],
-        "widths": [45, 8, 8, 18, 40],
+        "widths": [45, 8, 8, 18, 60],
         "aligns": ["left", "center", "center", "left", "left"],
     },
 }

@@ -133,6 +133,54 @@ class GitOperations:
         return author_counts
 
     # === 新增方法（支持修改行数） ===
+
+    def _get_file_path_variants(self, file_path):
+        """获取文件路径的各种变体（处理重命名和路径变更）"""
+        variants = set()
+        variants.add(file_path)
+
+        # 添加相对路径变体
+        if "/" in file_path:
+            variants.add(file_path.split("/")[-1])  # 只取文件名
+            variants.add("/".join(file_path.split("/")[1:]))  # 去掉第一级目录
+
+        # 添加可能的历史路径
+        try:
+            # 查询文件的重命名历史
+            cmd = f'git log --follow --name-only --pretty=format: -- "{file_path}" | sort | uniq'
+            result = self.run_command(cmd)
+            if result:
+                for path in result.split("\n"):
+                    if path.strip():
+                        variants.add(path.strip())
+        except Exception:
+            pass
+
+        return variants
+
+    def _is_matching_file(self, git_filename, target_file_path, path_variants):
+        """改进的文件名匹配逻辑"""
+        if not git_filename or not target_file_path:
+            return False
+
+        git_filename = git_filename.strip()
+
+        # 直接匹配
+        if git_filename == target_file_path:
+            return True
+
+        # 与变体匹配
+        if git_filename in path_variants:
+            return True
+
+        # 文件名匹配（处理路径变更）
+        git_basename = git_filename.split("/")[-1]
+        target_basename = target_file_path.split("/")[-1]
+        if git_basename == target_basename:
+            return True
+
+        return False
+
     def get_contributors_with_lines_since(self, file_path, since_date):
         """获取指定日期以来的文件贡献者（包含提交次数和修改行数）"""
         try:
@@ -430,3 +478,137 @@ class GitOperations:
         """检查分支是否存在（静默检查）"""
         result = self.run_command_silent(f"git show-ref --verify --quiet refs/heads/{branch_name}")
         return result is not None
+
+    def get_contributors_with_lines_since(self, file_path, since_date):
+        """获取指定日期以来的文件贡献者（包含提交次数和修改行数）- 修复版"""
+        try:
+            # 修复：使用更可靠的Git命令格式
+            cmd = f'git log --follow --since="{since_date}" --format="COMMIT:%an|%H" --numstat -- "{file_path}"'
+            result = self.run_command(cmd)
+
+            if not result:
+                return {}
+
+            contributors = {}
+            lines = result.split("\n")
+            current_author = None
+
+            # 获取文件的各种可能路径（处理重命名）
+            file_paths_variants = self._get_file_path_variants(file_path)
+
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+
+                # 修复：更严格的提交信息识别
+                if line.startswith("COMMIT:") and "|" in line:
+                    try:
+                        author_hash = line[7:]  # 去掉"COMMIT:"前缀
+                        author, commit_hash = author_hash.split("|", 1)
+                        current_author = author.strip()
+
+                        if current_author not in contributors:
+                            contributors[current_author] = {
+                                "commits": 0,
+                                "lines_added": 0,
+                                "lines_deleted": 0,
+                                "total_lines": 0,
+                            }
+                        contributors[current_author]["commits"] += 1
+                    except ValueError:
+                        continue
+
+                elif current_author and "\t" in line:
+                    # 修复：更精确的numstat行解析
+                    parts = line.split("\t")
+                    if len(parts) >= 3:
+                        added_str, deleted_str, filename = parts[0], parts[1], parts[2]
+
+                        # 修复：改进的文件名匹配逻辑
+                        if self._is_matching_file(filename, file_path, file_paths_variants):
+                            try:
+                                added = int(added_str) if added_str.isdigit() else 0
+                                deleted = int(deleted_str) if deleted_str.isdigit() else 0
+
+                                contributors[current_author]["lines_added"] += added
+                                contributors[current_author]["lines_deleted"] += deleted
+                                contributors[current_author]["total_lines"] += added + deleted
+                            except (ValueError, TypeError):
+                                # 跳过无法解析的行（如二进制文件）
+                                pass
+
+            return contributors
+
+        except Exception as e:
+            print(f"获取文件 {file_path} 的详细贡献统计时出错: {e}")
+            # 回退到基础方法
+            basic_contributors = self.get_contributors_since(file_path, since_date)
+            return {
+                author: {"commits": count, "lines_added": 0, "lines_deleted": 0, "total_lines": 0}
+                for author, count in basic_contributors.items()
+            }
+
+    def get_all_contributors_with_lines(self, file_path):
+        """获取文件的所有历史贡献者（包含提交次数和修改行数）- 修复版"""
+        try:
+            cmd = f'git log --follow --format="COMMIT:%an|%H" --numstat -- "{file_path}"'
+            result = self.run_command(cmd)
+
+            if not result:
+                return {}
+
+            contributors = {}
+            lines = result.split("\n")
+            current_author = None
+
+            file_paths_variants = self._get_file_path_variants(file_path)
+
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+
+                if line.startswith("COMMIT:") and "|" in line:
+                    try:
+                        author_hash = line[7:]
+                        author, commit_hash = author_hash.split("|", 1)
+                        current_author = author.strip()
+
+                        if current_author not in contributors:
+                            contributors[current_author] = {
+                                "commits": 0,
+                                "lines_added": 0,
+                                "lines_deleted": 0,
+                                "total_lines": 0,
+                            }
+                        contributors[current_author]["commits"] += 1
+                    except ValueError:
+                        continue
+
+                elif current_author and "\t" in line:
+                    parts = line.split("\t")
+                    if len(parts) >= 3:
+                        added_str, deleted_str, filename = parts[0], parts[1], parts[2]
+
+                        if self._is_matching_file(filename, file_path, file_paths_variants):
+                            try:
+                                added = int(added_str) if added_str.isdigit() else 0
+                                deleted = int(deleted_str) if deleted_str.isdigit() else 0
+
+                                contributors[current_author]["lines_added"] += added
+                                contributors[current_author]["lines_deleted"] += deleted
+                                contributors[current_author]["total_lines"] += added + deleted
+                            except (ValueError, TypeError):
+                                pass
+
+            return contributors
+
+        except Exception as e:
+            print(f"获取文件 {file_path} 的历史详细统计时出错: {e}")
+            # 回退到基础方法
+            basic_contributors = self.get_all_contributors(file_path)
+            return {
+                author: {"commits": count, "lines_added": 0, "lines_deleted": 0, "total_lines": 0}
+                for author, count in basic_contributors.items()
+            }

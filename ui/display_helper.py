@@ -22,31 +22,74 @@ class DisplayHelper:
         return width
 
     @staticmethod
+    @staticmethod
+    def _smart_truncate_assignment_reason(text, width):
+        """智能截断分配原因，保留关键信息"""
+        if width < 20:
+            return text[:width]
+
+        # 尝试保留关键信息
+        if "基于综合贡献度直接分配" in text:
+            # 提取括号内的统计信息
+            import re
+
+            match = re.search(r"\((.*?)\)", text)
+            if match:
+                stats_info = match.group(1)
+                # 缩短格式：近期提交:X,行数:Y,历史提交:Z,行数:W,得分:S
+                compact_stats = (
+                    stats_info.replace("近期提交:", "近提:")
+                    .replace("近期行数:", "近行:")
+                    .replace("历史提交:", "历提:")
+                    .replace("历史行数:", "历行:")
+                )
+                result = f"综合贡献度分配({compact_stats})"
+
+                if DisplayHelper.get_display_width(result) <= width:
+                    return result
+                else:
+                    # 进一步简化
+                    parts = compact_stats.split(", ")
+                    essential_parts = [parts[0], parts[-1]]  # 保留近期提交和得分
+                    simple_stats = ", ".join(essential_parts)
+                    result = f"综合分配({simple_stats})"
+                    return result[: width - 3] + "..." if DisplayHelper.get_display_width(result) > width else result
+
+        return DisplayHelper._basic_truncate(text, width)
+
+    @staticmethod
+    def _basic_truncate(text, width):
+        """基础截断方法"""
+        if width <= 3:
+            return text[:width]
+
+        truncated_text = ""
+        current_width = 0
+
+        for char in text:
+            char_width = 2 if ord(char) > 127 else 1
+            if current_width + char_width + 3 > width:
+                break
+            truncated_text += char
+            current_width += char_width
+
+        return truncated_text + "..."
+
+    @staticmethod
     def format_table_cell(text, width, align="left"):
-        """格式化表格单元格，确保对齐"""
+        """格式化表格单元格，确保对齐 - 修复版"""
         text_str = str(text)
         display_width = DisplayHelper.get_display_width(text_str)
 
-        # 如果文本太长，智能截断
+        # 修复：更智能的截断逻辑
         if display_width > width:
-            # 计算可以显示的字符数
-            truncated_text = ""
-            current_width = 0
-
-            for char in text_str:
-                char_width = 2 if ord(char) > 127 else 1
-                if current_width + char_width + 3 > width:  # 保留3个字符给"..."
-                    break
-                truncated_text += char
-                current_width += char_width
-
-            # 添加省略号
-            if width > 3:
-                text_str = truncated_text + "..."
+            # 对于分配原因这类重要信息，尽量保留关键部分
+            if "分配" in text_str or "贡献" in text_str:
+                text_str = DisplayHelper._smart_truncate_assignment_reason(text_str, width)
                 display_width = DisplayHelper.get_display_width(text_str)
             else:
-                text_str = text_str[:width]
-                display_width = width
+                text_str = DisplayHelper._basic_truncate(text_str, width)
+                display_width = DisplayHelper.get_display_width(text_str)
 
         padding = width - display_width
 

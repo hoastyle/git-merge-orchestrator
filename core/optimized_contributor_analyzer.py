@@ -177,6 +177,8 @@ class OptimizedContributorAnalyzer:
                     contributors[author] = {
                         "total_commits": count,
                         "recent_commits": count,
+                        "recent_lines_added": 0,
+                        "recent_lines_deleted": 0,
                         "score": count * SCORING_WEIGHTS["recent_commits"],
                     }
 
@@ -243,6 +245,8 @@ class OptimizedContributorAnalyzer:
                     contributors[author] = {
                         "total_commits": count,
                         "recent_commits": count,
+                        "recent_lines_added": 0,
+                        "recent_lines_deleted": 0,
                         "score": count * SCORING_WEIGHTS["recent_commits"],
                     }
 
@@ -689,7 +693,9 @@ class OptimizedContributorAnalyzer:
                             "recent_commits": count,
                             "total_lines": 0,
                             "recent_lines": 0,
-                            "score": count * SCORING_WEIGHTS["recent_commits"],
+                            "recent_lines_added": 0,
+                        "recent_lines_deleted": 0,
+                        "score": count * SCORING_WEIGHTS["recent_commits"],
                         }
 
             # 获取总体贡献统计（使用修改行数增强版）
