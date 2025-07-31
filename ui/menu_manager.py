@@ -22,7 +22,7 @@ class MenuManager:
                 self.show_main_menu()
 
                 try:
-                    choice = input("\n请选择功能分类 (0-6): ").strip()
+                    choice = input("\n请选择操作 (0-6): ").strip()
 
                     if choice == "0":
                         print("👋 感谢使用Git Merge Orchestrator！")
@@ -34,11 +34,11 @@ class MenuManager:
                     elif choice == "3":
                         self._handle_task_assignment_menu()
                     elif choice == "4":
-                        self._handle_merge_execution_menu()
+                        self._handle_smart_query_menu()
                     elif choice == "5":
-                        self._handle_system_management_menu()
+                        self._handle_merge_execution_menu()
                     elif choice == "6":
-                        self._handle_advanced_features_menu()
+                        self._handle_system_settings_menu()
                     else:
                         DisplayHelper.print_warning("无效选择，请输入0-6之间的数字")
 
@@ -53,21 +53,21 @@ class MenuManager:
             print("\n\n👋 用户中断，正在退出...")
 
     def show_main_menu(self):
-        """显示主菜单"""
+        """显示优化后的主菜单（简化版）"""
         print("\n" + "=" * 80)
-        print("🚀 Git Merge Orchestrator 主菜单")
+        print("🚀 Git Merge Orchestrator 主菜单 (优化版)")
         print("=" * 80)
 
         # 显示项目状态摘要
         self._show_project_summary()
 
-        print("\n📋 选择功能分类:")
-        print("1. 🚀 快速开始向导 (新用户推荐)")
-        print("2. 📊 项目管理 (计划、状态、分析)")
-        print("3. 👥 任务分配 (分配、查看、搜索)")
-        print("4. 🔄 执行合并 (组合并、批量合并)")
-        print("5. ⚙️  系统管理 (策略、缓存、状态)")
-        print("6. 🎯 高级功能 (详细分析、调试)")
+        print("\n📋 选择操作:")
+        print("1. 🚀 快速开始 - 全流程引导或继续项目")
+        print("2. 📊 项目管理 - 分析、计划、状态检查")
+        print("3. 👥 任务分配 - 自动/手动分配、查看分析")
+        print("4. 🔍 智能查询 - 文件、目录、负责人查询")
+        print("5. 🔄 执行合并 - 组合并、批量合并、交互式")
+        print("6. ⚙️  系统设置 - 策略、缓存、高级功能")
         print("0. 退出")
 
     def _show_project_summary(self):
@@ -355,9 +355,16 @@ class MenuManager:
     # === 任务分配 ===
 
     def _handle_task_assignment_menu(self):
-        """处理任务分配菜单"""
+        """处理任务分配菜单（简化版）"""
         while True:
-            self._show_task_assignment_menu()
+            print("\n👥 任务分配")
+            print("=" * 40)
+            print("a. 🚀 涡轮增压自动分配")
+            print("b. ✋ 手动分配任务")
+            print("c. 📊 查看贡献者分析")
+            print("d. 🔍 搜索负责人任务")
+            print("e. 返回主菜单")
+
             choice = input("\n请选择操作 (a-e): ").strip().lower()
 
             if choice == "a":
@@ -376,6 +383,183 @@ class MenuManager:
                 break
             else:
                 DisplayHelper.print_warning("无效选择，请输入a-e")
+
+    def _handle_smart_query_menu(self):
+        """处理智能查询菜单（新增）"""
+        while True:
+            print("\n🔍 智能查询")
+            print("=" * 40)
+            print("a. 📄 文件状态查询")
+            print("b. 📁 目录状态查询")
+            print("c. 👤 负责人状态查询")
+            print("d. 🎯 交互式文件搜索")
+            print("e. 🎯 交互式目录搜索")
+            print("f. 🎯 交互式负责人搜索")
+            print("g. 返回主菜单")
+
+            choice = input("\n请选择操作 (a-g): ").strip().lower()
+
+            if choice == "a":
+                query = input("请输入文件名或模式: ").strip()
+                if query:
+                    pattern_type = input("匹配模式 (simple/glob/regex) [simple]: ").strip().lower()
+                    if pattern_type not in ["simple", "glob", "regex"]:
+                        pattern_type = "simple"
+                    self.orchestrator.search_file_status(query, pattern_type)
+                else:
+                    DisplayHelper.print_warning("查询不能为空")
+            elif choice == "b":
+                directory = input("请输入目录路径: ").strip()
+                if directory:
+                    recursive_input = input("是否递归搜索? (Y/n): ").strip().lower()
+                    recursive = recursive_input != "n"
+                    self.orchestrator.search_directory_status(directory, recursive)
+                else:
+                    DisplayHelper.print_warning("目录路径不能为空")
+            elif choice == "c":
+                assignee = input("请输入负责人姓名: ").strip()
+                if assignee:
+                    fuzzy_input = input("是否模糊匹配? (y/N): ").strip().lower()
+                    fuzzy = fuzzy_input == "y"
+                    self.orchestrator.search_assignee_status_enhanced(assignee, fuzzy)
+                else:
+                    DisplayHelper.print_warning("负责人姓名不能为空")
+            elif choice == "d":
+                self.orchestrator.interactive_file_search()
+            elif choice == "e":
+                self.orchestrator.interactive_directory_search()
+            elif choice == "f":
+                self.orchestrator.interactive_assignee_search()
+            elif choice == "g":
+                break
+            else:
+                DisplayHelper.print_warning("无效选择，请输入a-g")
+
+    def _handle_system_settings_menu(self):
+        """处理系统设置菜单（合并后的简化版）"""
+        while True:
+            print("\n⚙️ 系统设置")
+            print("=" * 40)
+            print("a. 🔧 切换合并策略")
+            print("b. 📊 查看策略状态")
+            print("c. ⚡ 清理缓存")
+            print("d. ✅ 标记组完成")
+            print("e. 👤 标记负责人任务完成")
+            print("f. 📋 查看分组详情")
+            print("g. 🐛 系统调试信息")
+            print("h. 📊 性能统计报告")
+            print("i. 返回主菜单")
+
+            choice = input("\n请选择操作 (a-i): ").strip().lower()
+
+            if choice == "a":
+                if self.orchestrator.switch_merge_strategy():
+                    print("💡 策略切换成功，后续合并操作将使用新策略")
+                else:
+                    print("⚠️ 策略切换取消")
+            elif choice == "b":
+                self.orchestrator.show_merge_strategy_status()
+            elif choice == "c":
+                cache_file = self.orchestrator.contributor_analyzer.cache_file
+                if cache_file.exists():
+                    cache_file.unlink()
+                    print("✅ 缓存已清理")
+                else:
+                    print("ℹ️ 缓存文件不存在")
+            elif choice == "d":
+                group_name = input("请输入已完成的组名: ").strip()
+                if group_name:
+                    self.orchestrator.mark_group_completed(group_name)
+                else:
+                    DisplayHelper.print_warning("组名不能为空")
+            elif choice == "e":
+                assignee_name = input("请输入负责人姓名: ").strip()
+                if assignee_name:
+                    self.orchestrator.mark_assignee_completed(assignee_name)
+                else:
+                    DisplayHelper.print_warning("负责人姓名不能为空")
+            elif choice == "f":
+                self.orchestrator.view_group_details()
+            elif choice == "g":
+                self._show_debug_info()
+            elif choice == "h":
+                self._show_performance_report()
+            elif choice == "i":
+                break
+            else:
+                DisplayHelper.print_warning("无效选择，请输入a-i")
+
+    def _show_debug_info(self):
+        """显示调试信息"""
+        print("\n🐛 系统调试信息")
+        print("=" * 40)
+
+        # Git状态
+        print("📡 Git连接测试:")
+        result = self.orchestrator.git_ops.run_command("git --version")
+        print(f"   Git版本: {result if result else '获取失败'}")
+
+        # 分支信息
+        current_branch = self.orchestrator.git_ops.run_command("git branch --show-current")
+        print(f"   当前分支: {current_branch if current_branch else '获取失败'}")
+
+        # 文件系统
+        print(f"\n💾 文件系统:")
+        print(f"   工作目录: {self.orchestrator.file_helper.work_dir}")
+        print(f"   工作目录存在: {'✅' if self.orchestrator.file_helper.work_dir.exists() else '❌'}")
+        print(f"   计划文件存在: {'✅' if self.orchestrator.file_helper.plan_file_path.exists() else '❌'}")
+
+        # 模块状态
+        print(f"\n🧩 模块状态:")
+        print(f"   贡献者分析器: {'✅' if self.orchestrator.contributor_analyzer else '❌'}")
+        print(f"   任务分配器: {'✅' if self.orchestrator.task_assigner else '❌'}")
+        print(f"   合并执行器工厂: {'✅' if self.orchestrator.merge_executor_factory else '❌'}")
+        print(f"   查询管理器: {'✅' if self.orchestrator.query_manager else '❌'}")
+
+        input("\n按回车键继续...")
+
+    def _show_performance_report(self):
+        """显示性能报告"""
+        print("\n📊 性能统计报告")
+        print("=" * 50)
+
+        try:
+            # 贡献者分析性能
+            perf_stats = self.orchestrator.contributor_analyzer.get_performance_stats()
+            print("⚡ 贡献者分析性能:")
+            print(f"   缓存文件数: {perf_stats['cached_files']}")
+            print(f"   缓存目录数: {perf_stats['cached_directories']}")
+            print(f"   批量计算: {'✅' if perf_stats['batch_computed'] else '❌'}")
+            print(f"   缓存文件存在: {'✅' if perf_stats['cache_file_exists'] else '❌'}")
+
+            # 项目统计
+            summary = self.orchestrator.get_plan_summary()
+            if summary and summary.get("stats"):
+                stats = summary["stats"]
+                print(f"\n📈 项目统计:")
+                print(f"   总文件数: {stats['total_files']}")
+                print(f"   总分组数: {stats['total_groups']}")
+                print(
+                    f"   平均每组文件数: {stats['total_files']/stats['total_groups']:.1f}"
+                    if stats["total_groups"] > 0
+                    else "   平均每组文件数: 0"
+                )
+
+                # 效率统计
+                if stats["completed_groups"] > 0:
+                    completion_rate = stats["completed_groups"] / stats["total_groups"] * 100
+                    print(f"   完成率: {completion_rate:.1f}%")
+
+            # Git仓库信息
+            print(f"\n🗃️ 仓库信息:")
+            print(f"   仓库路径: {self.orchestrator.repo_path}")
+            print(f"   源分支: {self.orchestrator.source_branch}")
+            print(f"   目标分支: {self.orchestrator.target_branch}")
+
+        except Exception as e:
+            DisplayHelper.print_error(f"获取性能报告失败: {e}")
+
+        input("\n按回车键继续...")
 
     def _show_task_assignment_menu(self):
         """显示任务分配菜单"""

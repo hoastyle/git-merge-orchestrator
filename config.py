@@ -78,7 +78,22 @@ ACTIVITY_LEVELS = {
 }
 
 # 评分权重配置
-SCORING_WEIGHTS = {"recent_commits": 3, "total_commits": 1}  # 一年内提交权重  # 历史提交权重
+SCORING_WEIGHTS = {
+    "recent_commits": 3,      # 一年内提交权重
+    "total_commits": 1,       # 历史提交权重
+    "recent_modified_lines": 2,   # 一年内修改行数权重
+    "total_modified_lines": 0.5,  # 历史修改行数权重
+    "recent_added_lines": 1.5,    # 一年内新增行数权重
+    "total_added_lines": 0.3,     # 历史新增行数权重
+}
+
+# 分配策略配置
+ASSIGNMENT_STRATEGY = {
+    "file_level_assignment": True,   # 启用文件级分配
+    "fallback_to_group": True,       # 文件级分配失败时回退到组级分配
+    "enhanced_scoring": True,        # 启用增强评分算法（包含行数统计）
+    "line_stats_weight": 0.3,       # 代码行数在评分中的权重比例
+}
 
 # 性能优化配置
 CACHE_EXPIRY_HOURS = 24  # 缓存过期时间（小时）

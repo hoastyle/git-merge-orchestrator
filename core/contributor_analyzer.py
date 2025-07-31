@@ -4,7 +4,7 @@ Git Merge Orchestrator - 贡献者分析模块
 """
 
 from datetime import datetime, timedelta
-from config import SCORING_WEIGHTS, DEFAULT_ANALYSIS_MONTHS, DEFAULT_ACTIVE_MONTHS
+from config import SCORING_WEIGHTS, DEFAULT_ANALYSIS_MONTHS, DEFAULT_ACTIVE_MONTHS, ASSIGNMENT_STRATEGY
 
 
 class ContributorAnalyzer:
@@ -37,43 +37,96 @@ class ContributorAnalyzer:
         return all_contributors
 
     def analyze_file_contributors(self, filepath, include_recent=True):
-        """分析文件的主要贡献者（重点关注一年内的贡献）"""
+        """分析文件的主要贡献者（支持增强评分算法）"""
         try:
-            contributors = {}
-
-            # 获取一年内的贡献统计 (重点)
-            if include_recent:
-                one_year_ago = (datetime.now() - timedelta(days=DEFAULT_ANALYSIS_MONTHS * 30)).strftime("%Y-%m-%d")
-                recent_contributors = self.git_ops.get_contributors_since(filepath, one_year_ago)
-
-                for author, count in recent_contributors.items():
-                    contributors[author] = {
-                        "total_commits": count,
-                        "recent_commits": count,
-                        "score": count * SCORING_WEIGHTS["recent_commits"],
-                    }
-
-            # 获取总体贡献统计 (补充)
-            all_contributors = self.git_ops.get_all_contributors(filepath)
-
-            for author, count in all_contributors.items():
-                if author in contributors:
-                    contributors[author]["total_commits"] = count
-                    contributors[author]["score"] = (
-                        contributors[author]["recent_commits"] * SCORING_WEIGHTS["recent_commits"]
-                        + count * SCORING_WEIGHTS["total_commits"]
-                    )
-                else:
-                    contributors[author] = {
-                        "total_commits": count,
-                        "recent_commits": 0,
-                        "score": count * SCORING_WEIGHTS["total_commits"],
-                    }
-
-            return contributors
+            # 检查是否启用增强评分
+            if ASSIGNMENT_STRATEGY.get("enhanced_scoring", False):
+                return self._analyze_file_contributors_enhanced(filepath, include_recent)
+            else:
+                return self._analyze_file_contributors_basic(filepath, include_recent)
         except Exception as e:
             print(f"分析文件 {filepath} 时出错: {e}")
             return {}
+
+    def _analyze_file_contributors_basic(self, filepath, include_recent=True):
+        """基础文件贡献者分析（原有逻辑）"""
+        contributors = {}
+
+        # 获取一年内的贡献统计 (重点)
+        if include_recent:
+            one_year_ago = (datetime.now() - timedelta(days=DEFAULT_ANALYSIS_MONTHS * 30)).strftime("%Y-%m-%d")
+            recent_contributors = self.git_ops.get_contributors_since(filepath, one_year_ago)
+
+            for author, count in recent_contributors.items():
+                contributors[author] = {
+                    "total_commits": count,
+                    "recent_commits": count,
+                    "score": count * SCORING_WEIGHTS["recent_commits"],
+                }
+
+        # 获取总体贡献统计 (补充)
+        all_contributors = self.git_ops.get_all_contributors(filepath)
+
+        for author, count in all_contributors.items():
+            if author in contributors:
+                contributors[author]["total_commits"] = count
+                contributors[author]["score"] = (
+                    contributors[author]["recent_commits"] * SCORING_WEIGHTS["recent_commits"]
+                    + count * SCORING_WEIGHTS["total_commits"]
+                )
+            else:
+                contributors[author] = {
+                    "total_commits": count,
+                    "recent_commits": 0,
+                    "score": count * SCORING_WEIGHTS["total_commits"],
+                }
+
+        return contributors
+
+    def _analyze_file_contributors_enhanced(self, filepath, include_recent=True):
+        """增强文件贡献者分析（包含修改行数统计）"""
+        contributors = {}
+
+        # 获取增强的贡献者统计信息
+        enhanced_stats = self.git_ops.get_file_contributors_enhanced(filepath, include_recent, DEFAULT_ANALYSIS_MONTHS)
+
+        for author, stats in enhanced_stats.items():
+            # 计算增强评分
+            score = self._calculate_enhanced_score(stats)
+
+            contributors[author] = {
+                "total_commits": stats["total_commits"],
+                "recent_commits": stats["recent_commits"],
+                "total_added_lines": stats["total_added_lines"],
+                "recent_added_lines": stats["recent_added_lines"],
+                "total_modified_lines": stats["total_modified_lines"],
+                "recent_modified_lines": stats["recent_modified_lines"],
+                "last_commit": stats["last_commit"],
+                "score": score,
+            }
+
+        return contributors
+
+    def _calculate_enhanced_score(self, stats):
+        """计算增强评分（综合提交数和修改行数）"""
+        base_score = (
+            stats["recent_commits"] * SCORING_WEIGHTS["recent_commits"]
+            + stats["total_commits"] * SCORING_WEIGHTS["total_commits"]
+        )
+
+        # 添加代码行数权重
+        line_score = (
+            stats["recent_modified_lines"] * SCORING_WEIGHTS["recent_modified_lines"]
+            + stats["total_modified_lines"] * SCORING_WEIGHTS["total_modified_lines"]
+            + stats["recent_added_lines"] * SCORING_WEIGHTS["recent_added_lines"]
+            + stats["total_added_lines"] * SCORING_WEIGHTS["total_added_lines"]
+        )
+
+        # 应用行数权重比例
+        line_weight = ASSIGNMENT_STRATEGY.get("line_stats_weight", 0.3)
+        enhanced_score = base_score * (1 - line_weight) + line_score * line_weight
+
+        return enhanced_score
 
     def analyze_directory_contributors(self, directory_path, include_recent=True):
         """分析目录级别的主要贡献者"""

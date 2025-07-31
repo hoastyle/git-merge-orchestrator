@@ -19,6 +19,7 @@ from core.optimized_task_assigner import OptimizedTaskAssigner
 from core.task_assigner import TaskAssigner
 from core.merge_executor_factory import MergeExecutorFactory
 from core.plan_manager import PlanManager
+from core.query_manager import QueryManager
 
 
 class GitMergeOrchestrator:
@@ -45,9 +46,10 @@ class GitMergeOrchestrator:
         # 初始化合并执行器工厂
         self.merge_executor_factory = MergeExecutorFactory(repo_path)
 
-        self.plan_manager = PlanManager(
-            self.git_ops, self.file_helper, self.contributor_analyzer
-        )
+        self.plan_manager = PlanManager(self.git_ops, self.file_helper, self.contributor_analyzer)
+
+        # 初始化查询管理器
+        self.query_manager = QueryManager(self.file_helper, self.contributor_analyzer)
 
         # 缓存集成分支名
         self._integration_branch = None
@@ -71,9 +73,7 @@ class GitMergeOrchestrator:
             try:
                 from core.interactive_merge_executor import InteractiveMergeExecutor
 
-                self._interactive_executor = InteractiveMergeExecutor(
-                    self.git_ops, self.file_helper
-                )
+                self._interactive_executor = InteractiveMergeExecutor(self.git_ops, self.file_helper)
             except ImportError as e:
                 DisplayHelper.print_error(f"无法加载交互式合并模块: {e}")
                 return None
@@ -81,9 +81,7 @@ class GitMergeOrchestrator:
 
     def get_current_merge_executor(self):
         """获取当前合并执行器实例"""
-        return self.merge_executor_factory.create_executor(
-            self.git_ops, self.file_helper
-        )
+        return self.merge_executor_factory.create_executor(self.git_ops, self.file_helper)
 
     def get_merge_strategy_info(self):
         """获取当前合并策略信息"""
@@ -104,18 +102,14 @@ class GitMergeOrchestrator:
 
     def analyze_divergence(self):
         """分析分支分叉情况"""
-        result = self.plan_manager.analyze_divergence(
-            self.source_branch, self.target_branch
-        )
+        result = self.plan_manager.analyze_divergence(self.source_branch, self.target_branch)
         if result:
             self._integration_branch = result["integration_branch"]
         return result
 
     def create_merge_plan(self):
         """创建智能合并计划"""
-        plan = self.plan_manager.create_merge_plan(
-            self.source_branch, self.target_branch, self.max_files_per_group
-        )
+        plan = self.plan_manager.create_merge_plan(self.source_branch, self.target_branch, self.max_files_per_group)
         if plan:
             self._integration_branch = plan["integration_branch"]
         return plan
@@ -143,9 +137,7 @@ class GitMergeOrchestrator:
 
             # 显示性能优化报告
             if "performance_stats" in result:
-                perf_report = self.task_assigner.get_optimization_report(
-                    result["performance_stats"]
-                )
+                perf_report = self.task_assigner.get_optimization_report(result["performance_stats"])
                 print(perf_report)
 
             # 原有的分配总结显示
@@ -159,9 +151,7 @@ class GitMergeOrchestrator:
             print(f"🚫 自动排除: {len(inactive_contributors)} 位（近3个月无提交）")
             print(f"🔧 手动排除: {len(exclude_authors or [])} 位")
 
-            summary = DisplayHelper.format_assignment_summary(
-                assignment_count, unassigned_groups
-            )
+            summary = DisplayHelper.format_assignment_summary(assignment_count, unassigned_groups)
             print(summary)
 
             DisplayHelper.print_success("涡轮增压自动分配完成")
@@ -202,13 +192,7 @@ class GitMergeOrchestrator:
             group_name = group.get("name", "N/A")
             assignee = group.get("assignee", "未分配")
             file_count = group.get("file_count", len(group.get("files", [])))
-            status = (
-                "✅"
-                if group.get("status") == "completed"
-                else "🔄"
-                if assignee != "未分配"
-                else "⏳"
-            )
+            status = "✅" if group.get("status") == "completed" else "🔄" if assignee != "未分配" else "⏳"
             group_type = group.get("group_type", "unknown")
 
             print(f"{i:3d}. {status} {group_name}")
@@ -248,9 +232,7 @@ class GitMergeOrchestrator:
 
         # 显示每个组的贡献者信息
         for group in plan["groups"]:
-            print(
-                f"\n📁 组: {group['name']} ({group.get('file_count', len(group['files']))} 文件)"
-            )
+            print(f"\n📁 组: {group['name']} ({group.get('file_count', len(group['files']))} 文件)")
 
             assignee = group.get("assignee", "未分配")
             fallback_reason = group.get("fallback_reason", "")
@@ -276,28 +258,18 @@ class GitMergeOrchestrator:
                         total = stats["total_commits"]
                         score = stats["score"]
 
-                        activity_info = DisplayHelper.get_activity_info(
-                            recent, author in active_contributors
-                        )
-                        activity_display = (
-                            f"{activity_info['icon']}{activity_info['name']}"
-                        )
+                        activity_info = DisplayHelper.get_activity_info(recent, author in active_contributors)
+                        activity_display = f"{activity_info['icon']}{activity_info['name']}"
 
-                        print(
-                            f" {i}. {author}: {recent}|{total}|{score} {activity_display}"
-                        )
+                        print(f" {i}. {author}: {recent}|{total}|{score} {activity_display}")
                     else:
-                        activity_display = (
-                            "📊历史" if author in active_contributors else "💤静默"
-                        )
+                        activity_display = "📊历史" if author in active_contributors else "💤静默"
                         print(f" {i}. {author}: ?|{stats}|{stats} {activity_display}")
             else:
                 print(" ⚠️ 贡献者数据未分析，请先运行自动分配任务")
 
         # 显示全局贡献者排名
-        all_contributors_global = self.contributor_analyzer.calculate_global_contributor_stats(
-            plan
-        )
+        all_contributors_global = self.contributor_analyzer.calculate_global_contributor_stats(plan)
         if all_contributors_global:
             print(f"\n🏆 全局贡献者智能排名 (基于一年内活跃度):")
 
@@ -368,13 +340,7 @@ class GitMergeOrchestrator:
             table_data = []
             for i, group in enumerate(plan["groups"], 1):
                 assignee = group.get("assignee", "未分配")
-                status = (
-                    "✅"
-                    if group.get("status") == "completed"
-                    else "🔄"
-                    if assignee != "未分配"
-                    else "⏳"
-                )
+                status = "✅" if group.get("status") == "completed" else "🔄" if assignee != "未分配" else "⏳"
                 group_type = group.get("group_type", "unknown")
                 file_count = group.get("file_count", len(group["files"]))
 
@@ -435,15 +401,9 @@ class GitMergeOrchestrator:
             reason_type = DisplayHelper.categorize_assignment_reason(assignment_reason)
 
             # 截断过长的原因说明
-            short_reason = (
-                assignment_reason[:45] + "..."
-                if len(assignment_reason) > 45
-                else assignment_reason
-            )
+            short_reason = assignment_reason[:45] + "..." if len(assignment_reason) > 45 else assignment_reason
 
-            table_data.append(
-                [group["name"], assignee, str(file_count), reason_type, short_reason]
-            )
+            table_data.append([group["name"], assignee, str(file_count), reason_type, short_reason])
 
         DisplayHelper.print_table("assignment_reasons", table_data)
 
@@ -498,15 +458,9 @@ class GitMergeOrchestrator:
                 pending += 1
 
             # 截断长的分配原因
-            short_reason = (
-                assignment_reason[:35] + "..."
-                if len(assignment_reason) > 35
-                else assignment_reason
-            )
+            short_reason = assignment_reason[:35] + "..." if len(assignment_reason) > 35 else assignment_reason
 
-            table_data.append(
-                [group["name"], str(file_count), status_icon, group_type, short_reason]
-            )
+            table_data.append([group["name"], str(file_count), status_icon, group_type, short_reason])
 
         DisplayHelper.print_table("assignee_tasks", table_data)
         print(f"📈 进度: {completed}/{len(assignee_groups)} 组已完成, {pending} 组待处理")
@@ -515,9 +469,7 @@ class GitMergeOrchestrator:
         if len(assignee_groups) <= 3:  # 只有少量组时显示详细信息
             print(f"\n📄 详细文件列表:")
             for i, group in enumerate(assignee_groups, 1):
-                print(
-                    f"\n{i}. 组: {group['name']} ({group.get('file_count', len(group['files']))} 文件)"
-                )
+                print(f"\n{i}. 组: {group['name']} ({group.get('file_count', len(group['files']))} 文件)")
                 assignment_reason = group.get("assignment_reason", "未指定")
                 print(f"   分配原因: {assignment_reason}")
                 for file in group["files"][:5]:  # 最多显示5个文件
@@ -540,9 +492,7 @@ class GitMergeOrchestrator:
         print(f"📊 当前合并策略: {strategy_info['mode_name']}")
         print(f"📝 策略说明: {strategy_info['description']}")
 
-        return merge_executor.merge_group(
-            group_name, self.source_branch, self.target_branch, self.integration_branch
-        )
+        return merge_executor.merge_group(group_name, self.source_branch, self.target_branch, self.integration_branch)
 
     def merge_assignee_tasks(self, assignee_name):
         """合并指定负责人的所有任务 - 根据当前策略选择执行器"""
@@ -643,10 +593,173 @@ class GitMergeOrchestrator:
 
         print("📋 可用策略:")
         for mode_info in available_modes:
-            current_indicator = (
-                " ← 当前" if mode_info["mode"] == strategy_info["current_mode"] else ""
-            )
+            current_indicator = " ← 当前" if mode_info["mode"] == strategy_info["current_mode"] else ""
             print(f"  • {mode_info['name']}{current_indicator}")
             print(f"    {mode_info['description']}")
             print(f"    {mode_info['suitable']}")
             print()
+
+    # === 查询功能 ===
+
+    def search_file_status(self, query: str, pattern_type: str = "simple"):
+        """按文件查询合并状态"""
+        results = self.query_manager.search_file_status(query, pattern_type)
+
+        if "error" in results:
+            DisplayHelper.print_error(results["error"])
+            return False
+
+        # 显示查询结果
+        report = self.query_manager.generate_query_report(results, "table")
+        print(report)
+
+        return True
+
+    def search_directory_status(self, directory_path: str, recursive: bool = True):
+        """按文件夹查询合并状态"""
+        results = self.query_manager.search_directory_status(directory_path, recursive)
+
+        if "error" in results:
+            DisplayHelper.print_error(results["error"])
+            return False
+
+        # 显示查询结果
+        report = self.query_manager.generate_query_report(results, "summary")
+        print(report)
+
+        # 显示详细的组信息
+        if results["groups"]:
+            print("\n📋 相关组详情:")
+            headers = ["组名", "负责人", "状态", "目录文件数", "总文件数"]
+            rows = []
+
+            for group in results["groups"]:
+                rows.append(
+                    [
+                        group["name"],
+                        group["assignee"],
+                        group["status"],
+                        str(group["files_count"]),
+                        str(group["total_files"]),
+                    ]
+                )
+
+            DisplayHelper.print_table(headers, rows)
+
+        return True
+
+    def search_assignee_status_enhanced(self, assignee_name: str, fuzzy: bool = False):
+        """增强版负责人任务查询"""
+        results = self.query_manager.search_assignee_status(assignee_name, fuzzy)
+
+        if "error" in results:
+            DisplayHelper.print_error(results["error"])
+            return False
+
+        if not results["groups"]:
+            if fuzzy:
+                print(f"🔍 未找到包含 '{assignee_name}' 的负责人")
+            else:
+                print(f"🔍 未找到负责人 '{assignee_name}' 的任务")
+            return False
+
+        # 显示查询结果摘要
+        report = self.query_manager.generate_query_report(results, "summary")
+        print(report)
+
+        # 显示详细的任务列表
+        print(f"\n📋 {assignee_name} 的详细任务:")
+        headers = ["组名", "状态", "文件数", "分配类型", "文件级分配"]
+        rows = []
+
+        for group in results["groups"]:
+            file_level_info = ""
+            if group.get("file_assignments"):
+                assigned_files = sum(
+                    1 for fa in group["file_assignments"].values() if fa.get("assignee") == assignee_name
+                )
+                if assigned_files > 0:
+                    file_level_info = f"{assigned_files} 个文件"
+
+            rows.append(
+                [
+                    group["name"],
+                    group["status"],
+                    str(group["file_count"]),
+                    group.get("assignment_reason", "")[:30]
+                    + ("..." if len(group.get("assignment_reason", "")) > 30 else ""),
+                    file_level_info,
+                ]
+            )
+
+        DisplayHelper.print_table(headers, rows)
+
+        return True
+
+    def get_query_suggestions(self, query_type: str, partial_input: str = ""):
+        """获取查询建议"""
+        return self.query_manager.get_query_suggestions(query_type, partial_input)
+
+    def interactive_file_search(self):
+        """交互式文件搜索"""
+        print("🔍 交互式文件搜索")
+        print("支持的匹配模式:")
+        print("  simple: 简单匹配（默认）")
+        print("  glob: 通配符匹配 (*.py, src/*.js)")
+        print("  regex: 正则表达式匹配")
+        print()
+
+        query = input("请输入文件名或模式: ").strip()
+        if not query:
+            print("❌ 查询不能为空")
+            return False
+
+        pattern_type = input("匹配模式 (simple/glob/regex) [simple]: ").strip().lower()
+        if pattern_type not in ["simple", "glob", "regex"]:
+            pattern_type = "simple"
+
+        return self.search_file_status(query, pattern_type)
+
+    def interactive_directory_search(self):
+        """交互式目录搜索"""
+        print("📁 交互式目录搜索")
+
+        # 获取目录建议
+        suggestions = self.get_query_suggestions("directory")
+        if suggestions:
+            print("💡 可用目录建议:")
+            for i, suggestion in enumerate(suggestions[:10], 1):
+                print(f"  {i}. {suggestion}")
+            print()
+
+        directory = input("请输入目录路径: ").strip()
+        if not directory:
+            print("❌ 目录路径不能为空")
+            return False
+
+        recursive_input = input("是否递归搜索子目录? (Y/n): ").strip().lower()
+        recursive = recursive_input != "n"
+
+        return self.search_directory_status(directory, recursive)
+
+    def interactive_assignee_search(self):
+        """交互式负责人搜索"""
+        print("👤 交互式负责人搜索")
+
+        # 获取负责人建议
+        suggestions = self.get_query_suggestions("assignee")
+        if suggestions:
+            print("💡 当前负责人:")
+            for i, suggestion in enumerate(suggestions, 1):
+                print(f"  {i}. {suggestion}")
+            print()
+
+        assignee = input("请输入负责人姓名: ").strip()
+        if not assignee:
+            print("❌ 负责人姓名不能为空")
+            return False
+
+        fuzzy_input = input("是否使用模糊匹配? (y/N): ").strip().lower()
+        fuzzy = fuzzy_input == "y"
+
+        return self.search_assignee_status_enhanced(assignee, fuzzy)

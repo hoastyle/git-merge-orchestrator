@@ -131,6 +131,116 @@ class GitOperations:
 
         return author_counts
 
+    def get_contributors_with_line_stats(self, file_path, since_date=None):
+        """获取文件贡献者的详细统计信息（包括修改行数）"""
+        authors_stats = {}
+
+        # 构建基础命令
+        cmd_base = f'git log --follow --numstat --format="COMMIT:%an:%at"'
+        if since_date:
+            cmd_base += f' --since="{since_date}"'
+        cmd_base += f' -- "{file_path}"'
+
+        result = self.run_command(cmd_base)
+        if not result:
+            return {}
+
+        lines = result.split("\n")
+        current_author = None
+        current_timestamp = None
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            if line.startswith("COMMIT:"):
+                # 解析提交信息：COMMIT:作者:时间戳
+                parts = line.split(":", 2)
+                if len(parts) >= 2:
+                    current_author = parts[1]
+                    current_timestamp = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0
+
+                    if current_author not in authors_stats:
+                        authors_stats[current_author] = {
+                            "commits": 0,
+                            "added_lines": 0,
+                            "deleted_lines": 0,
+                            "modified_lines": 0,
+                            "last_commit": current_timestamp,
+                        }
+                    authors_stats[current_author]["commits"] += 1
+
+                    # 更新最后提交时间
+                    if current_timestamp > authors_stats[current_author]["last_commit"]:
+                        authors_stats[current_author]["last_commit"] = current_timestamp
+            else:
+                # 解析文件变更统计：added_lines	deleted_lines	filename
+                if current_author and "\t" in line:
+                    parts = line.split("\t")
+                    if len(parts) >= 2:
+                        try:
+                            added = int(parts[0]) if parts[0].isdigit() else 0
+                            deleted = int(parts[1]) if parts[1].isdigit() else 0
+
+                            authors_stats[current_author]["added_lines"] += added
+                            authors_stats[current_author]["deleted_lines"] += deleted
+                            authors_stats[current_author]["modified_lines"] += added + deleted
+                        except (ValueError, IndexError):
+                            # 忽略解析错误的行
+                            continue
+
+        return authors_stats
+
+    def get_file_contributors_enhanced(self, file_path, include_recent=True, recent_months=12):
+        """获取文件贡献者的增强统计信息"""
+        contributors = {}
+
+        if include_recent:
+            # 获取最近N个月的详细统计
+            cutoff_date = (datetime.now() - timedelta(days=recent_months * 30)).strftime("%Y-%m-%d")
+            recent_stats = self.get_contributors_with_line_stats(file_path, cutoff_date)
+
+            for author, stats in recent_stats.items():
+                contributors[author] = {
+                    "recent_commits": stats["commits"],
+                    "recent_added_lines": stats["added_lines"],
+                    "recent_deleted_lines": stats["deleted_lines"],
+                    "recent_modified_lines": stats["modified_lines"],
+                    "total_commits": stats["commits"],
+                    "total_added_lines": stats["added_lines"],
+                    "total_deleted_lines": stats["deleted_lines"],
+                    "total_modified_lines": stats["modified_lines"],
+                    "last_commit": stats["last_commit"],
+                }
+
+        # 获取所有历史统计
+        all_stats = self.get_contributors_with_line_stats(file_path)
+
+        for author, stats in all_stats.items():
+            if author not in contributors:
+                contributors[author] = {
+                    "recent_commits": 0,
+                    "recent_added_lines": 0,
+                    "recent_deleted_lines": 0,
+                    "recent_modified_lines": 0,
+                    "total_commits": stats["commits"],
+                    "total_added_lines": stats["added_lines"],
+                    "total_deleted_lines": stats["deleted_lines"],
+                    "total_modified_lines": stats["modified_lines"],
+                    "last_commit": stats["last_commit"],
+                }
+            else:
+                # 更新总计数据
+                contributors[author]["total_commits"] = stats["commits"]
+                contributors[author]["total_added_lines"] = stats["added_lines"]
+                contributors[author]["total_deleted_lines"] = stats["deleted_lines"]
+                contributors[author]["total_modified_lines"] = stats["modified_lines"]
+                if stats["last_commit"] > contributors[author]["last_commit"]:
+                    contributors[author]["last_commit"] = stats["last_commit"]
+
+        return contributors
+
     def get_active_contributors(self, months=3):
         """获取近N个月有提交的活跃贡献者列表"""
         cutoff_date = (datetime.now() - timedelta(days=months * 30)).strftime("%Y-%m-%d")
