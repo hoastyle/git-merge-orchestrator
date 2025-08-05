@@ -62,24 +62,42 @@ def parse_arguments():
     )
 
     # 可选的位置参数（支持无参数运行）
-    parser.add_argument("source_branch", nargs="?", help="源分支名称（可选，未提供时从配置文件读取）")  # 可选参数
-    parser.add_argument("target_branch", nargs="?", help="目标分支名称（可选，未提供时从配置文件读取）")  # 可选参数
+    parser.add_argument(
+        "source_branch", nargs="?", help="源分支名称（可选，未提供时从配置文件读取）"
+    )  # 可选参数
+    parser.add_argument(
+        "target_branch", nargs="?", help="目标分支名称（可选，未提供时从配置文件读取）"
+    )  # 可选参数
 
     # 配置管理参数
-    parser.add_argument("--update-config", action="store_true", help="更新已保存的配置（当提供分支参数时）")
-    parser.add_argument("--no-save-config", action="store_true", help="不保存或更新配置（仅本次使用指定参数）")
+    parser.add_argument(
+        "--update-config", action="store_true", help="更新已保存的配置（当提供分支参数时）"
+    )
+    parser.add_argument(
+        "--no-save-config", action="store_true", help="不保存或更新配置（仅本次使用指定参数）"
+    )
     parser.add_argument("--show-config", action="store_true", help="显示当前保存的配置信息")
     parser.add_argument("--reset-config", action="store_true", help="重置（删除）保存的配置")
 
     # 原有参数
-    parser.add_argument("--max-files", type=int, default=5, help="每组最大文件数 (默认: 5)")
+    parser.add_argument(
+        "--max-files", type=int, default=5, help="每组最大文件数 (默认: 5，仅组模式使用)"
+    )
     parser.add_argument("--repo", default=".", help="Git仓库路径 (默认: 当前目录)")
     parser.add_argument(
         "--strategy",
         choices=["legacy", "standard"],
         help="合并策略 (legacy: 快速覆盖, standard: 三路合并)",
     )
-    parser.add_argument("--version", action="version", version="Git Merge Orchestrator 2.1 (配置增强版)")
+    parser.add_argument(
+        "--processing-mode",
+        choices=["file_level", "group_based"],
+        default="file_level",
+        help="处理模式：file_level（文件级处理）或 group_based（传统组模式）（默认: file_level）",
+    )
+    parser.add_argument(
+        "--version", action="version", version="Git Merge Orchestrator 2.2 (文件级架构)"
+    )
 
     return parser.parse_args()
 
@@ -110,7 +128,11 @@ def resolve_branches_and_config(args):
             if args.update_config or not config_manager.has_valid_config():
                 action = "更新" if config_manager.has_valid_config() else "保存"
                 if config_manager.save_config(
-                    args.source_branch, args.target_branch, args.repo, args.max_files, args.strategy
+                    args.source_branch,
+                    args.target_branch,
+                    args.repo,
+                    args.max_files,
+                    args.strategy,
                 ):
                     print(f"✅ 配置已{action}，下次可直接运行 'python main.py'")
 
@@ -140,7 +162,9 @@ def resolve_branches_and_config(args):
     source_branch, target_branch = get_branches_interactively(args.repo)
     if source_branch and target_branch:
         # 保存配置
-        if config_manager.save_config(source_branch, target_branch, args.repo, args.max_files, args.strategy):
+        if config_manager.save_config(
+            source_branch, target_branch, args.repo, args.max_files, args.strategy
+        ):
             print(f"✅ 初始配置已保存，下次可直接运行 'python main.py'")
 
     return source_branch, target_branch, config_manager
@@ -169,7 +193,10 @@ def get_branches_interactively(repo_path):
                 if branch not in branches:
                     branches.append(branch)
 
-        print(f"📋 发现分支: {', '.join(branches[:10])}" + ("..." if len(branches) > 10 else ""))
+        print(
+            f"📋 发现分支: {', '.join(branches[:10])}"
+            + ("..." if len(branches) > 10 else "")
+        )
 
     # 交互式输入
     print(f"\n🎯 请配置分支信息:")
@@ -191,11 +218,15 @@ def get_branches_interactively(repo_path):
 
 def show_welcome_banner(orchestrator, config_manager=None):
     """显示欢迎横幅（配置增强版）"""
-    print("🚀 Git大分叉智能分步合并工具 (配置增强版)")
+    mode_info = orchestrator.get_processing_mode_info()
+    print(f"🚀 Git大分叉智能分步合并工具 (v2.2 - {mode_info['mode_name']})")
     print("=" * 80)
     print(f"源分支: {orchestrator.source_branch}")
     print(f"目标分支: {orchestrator.target_branch}")
-    print(f"每组最大文件数: {orchestrator.max_files_per_group}")
+    print(f"处理模式: {mode_info['mode_name']}")
+    print(f"模式描述: {mode_info['description']}")
+    if orchestrator.processing_mode == "group_based":
+        print(f"每组最大文件数: {orchestrator.max_files_per_group}")
     print(f"工作目录: {orchestrator.repo_path}")
 
     # 显示配置信息
@@ -213,30 +244,62 @@ def show_welcome_banner(orchestrator, config_manager=None):
     print(f"📝 策略说明: {strategy_info['description']}")
 
     # 显示版本特性
-    print("\n🆕 配置增强特性:")
-    print("   • 📖 自动配置读取: 后续运行无需参数")
-    print("   • 💾 自动配置保存: 首次运行后自动保存设置")
-    print("   • 🔄 配置更新支持: --update-config 参数更新")
-    print("   • 🎯 智能参数处理: 命令行 > 配置文件 > 交互式")
+    print(f"\n🆕 v2.2 架构特性:")
+    print("   • 📁 文件级处理: 更精确的任务分配和进度跟踪")
+    print("   • 🔄 双模式支持: 文件级处理 + 传统组模式兼容")
+    print("   • 🎯 智能分配: 基于文件贡献度的精确分配")
+    print("   • ⚖️ 负载均衡: 自动优化工作负载分布")
+    print("   • 📖 自动配置: 后续运行无需参数")
 
     # 显示计划摘要（如果存在）
     try:
         summary = orchestrator.get_plan_summary()
-        if summary and summary.get("stats"):
-            stats = summary["stats"]
+        if summary:
             print(f"\n📊 当前计划状态:")
-            print(f"   总分组: {stats.get('total_groups', 0)} 个")
-            print(f"   总文件: {stats.get('total_files', 0)} 个")
-            print(f"   已分配: {stats.get('assigned_groups', 0)} 组 ({stats.get('assigned_files', 0)} 文件)")
-            print(f"   已完成: {stats.get('completed_groups', 0)} 组 ({stats.get('completed_files', 0)} 文件)")
+
+            if orchestrator.processing_mode == "file_level":
+                # 文件级模式显示
+                stats = summary.get("completion_stats", {})
+                print(f"   总文件: {stats.get('total_files', 0)} 个")
+                print(
+                    f"   已分配: {stats.get('assigned_files', 0)} 个 ({stats.get('assignment_rate', 0):.1f}%)"
+                )
+                print(
+                    f"   已完成: {stats.get('completed_files', 0)} 个 ({stats.get('completion_rate', 0):.1f}%)"
+                )
+                print(f"   待处理: {stats.get('pending_files', 0)} 个")
+
+                workload = summary.get("workload_distribution", {})
+                if workload:
+                    print(f"   参与人数: {len(workload)} 位")
+
+                # 智能建议
+                if stats.get("total_files", 0) == 0:
+                    print("💡 建议: 使用快速开始向导创建文件级合并计划")
+                elif stats.get("assigned_files", 0) == 0:
+                    print("💡 建议: 使用文件级智能分配系统")
+                elif stats.get("completed_files", 0) < stats.get("total_files", 0):
+                    print("💡 建议: 检查文件完成状态或使用负载均衡")
+            else:
+                # 组模式显示（向后兼容）
+                stats = summary.get("stats", {})
+                print(f"   总分组: {stats.get('total_groups', 0)} 个")
+                print(f"   总文件: {stats.get('total_files', 0)} 个")
+                print(
+                    f"   已分配: {stats.get('assigned_groups', 0)} 组 ({stats.get('assigned_files', 0)} 文件)"
+                )
+                print(
+                    f"   已完成: {stats.get('completed_groups', 0)} 组 ({stats.get('completed_files', 0)} 文件)"
+                )
+
+                # 智能建议
+                if stats.get("total_groups", 0) == 0:
+                    print("💡 建议: 使用快速开始向导创建合并计划")
+                elif stats.get("assigned_groups", 0) == 0:
+                    print("💡 建议: 使用涡轮增压自动分配任务")
+
             if summary.get("integration_branch"):
                 print(f"   集成分支: {summary['integration_branch']}")
-
-            # 智能建议
-            if stats["total_groups"] == 0:
-                print("💡 建议: 使用快速开始向导创建合并计划")
-            elif stats["assigned_groups"] == 0:
-                print("💡 建议: 使用涡轮增压自动分配任务")
             elif stats["completed_groups"] < stats["total_groups"]:
                 print("💡 建议: 继续执行合并操作")
             else:
@@ -257,12 +320,16 @@ def validate_environment(orchestrator):
         return False
 
     # 检查分支是否存在
-    result = orchestrator.git_ops.run_command(f"git rev-parse --verify {orchestrator.source_branch}")
+    result = orchestrator.git_ops.run_command(
+        f"git rev-parse --verify {orchestrator.source_branch}"
+    )
     if result is None:
         DisplayHelper.print_error(f"源分支 '{orchestrator.source_branch}' 不存在")
         return False
 
-    result = orchestrator.git_ops.run_command(f"git rev-parse --verify {orchestrator.target_branch}")
+    result = orchestrator.git_ops.run_command(
+        f"git rev-parse --verify {orchestrator.target_branch}"
+    )
     if result is None:
         DisplayHelper.print_error(f"目标分支 '{orchestrator.target_branch}' 不存在")
         return False
@@ -293,6 +360,7 @@ def main():
             target_branch=target_branch,
             repo_path=args.repo,
             max_files_per_group=args.max_files,
+            processing_mode=args.processing_mode,
         )
 
         # 设置命令行指定的策略

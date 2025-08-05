@@ -21,6 +21,9 @@ from core.task_assigner import TaskAssigner
 from core.merge_executor_factory import MergeExecutorFactory
 from core.plan_manager import PlanManager
 from core.query_system import QuerySystem
+from core.file_manager import FileManager
+from core.file_task_assigner import FileTaskAssigner
+from core.file_plan_manager import FilePlanManager
 
 
 class GitMergeOrchestrator:
@@ -32,31 +35,66 @@ class GitMergeOrchestrator:
         target_branch,
         repo_path=".",
         max_files_per_group=DEFAULT_MAX_FILES_PER_GROUP,
+        processing_mode="file_level",  # 新增：处理模式 "group_based" 或 "file_level"
     ):
         self.source_branch = source_branch
         self.target_branch = target_branch
         self.repo_path = Path(repo_path)
         self.max_files_per_group = max_files_per_group
+        self.processing_mode = processing_mode
 
         # 初始化忽略管理器
         self.ignore_manager = IgnoreManager(repo_path)
 
         # 初始化核心组件
         self.git_ops = GitOperations(repo_path, self.ignore_manager)
-        self.file_helper = FileHelper(repo_path, max_files_per_group)
         self.contributor_analyzer = OptimizedContributorAnalyzer(self.git_ops)
-        self.task_assigner = OptimizedTaskAssigner(self.contributor_analyzer)
+
+        # 根据处理模式初始化不同的组件
+        if processing_mode == "file_level":
+            # 文件级处理组件
+            self.file_manager = FileManager(repo_path, self.ignore_manager)
+            self.file_task_assigner = FileTaskAssigner(
+                self.contributor_analyzer, self.file_manager
+            )
+            self.file_plan_manager = FilePlanManager(
+                self.git_ops, self.file_manager, self.contributor_analyzer
+            )
+
+            # 兼容性：保留组模式组件但标记为废弃
+            self.file_helper = FileHelper(repo_path, max_files_per_group)
+            self.task_assigner = OptimizedTaskAssigner(self.contributor_analyzer)
+            self.plan_manager = PlanManager(
+                self.git_ops, self.file_helper, self.contributor_analyzer
+            )
+        else:
+            # 传统组模式组件（向后兼容）
+            self.file_helper = FileHelper(repo_path, max_files_per_group)
+            self.task_assigner = OptimizedTaskAssigner(self.contributor_analyzer)
+            self.plan_manager = PlanManager(
+                self.git_ops, self.file_helper, self.contributor_analyzer
+            )
+
+            # 文件级组件（可选使用）
+            self.file_manager = FileManager(repo_path, self.ignore_manager)
+            self.file_task_assigner = FileTaskAssigner(
+                self.contributor_analyzer, self.file_manager
+            )
+            self.file_plan_manager = FilePlanManager(
+                self.git_ops, self.file_manager, self.contributor_analyzer
+            )
 
         # 初始化合并执行器工厂
         self.merge_executor_factory = MergeExecutorFactory(repo_path)
 
-        self.plan_manager = PlanManager(
-            self.git_ops, self.file_helper, self.contributor_analyzer
-        )
-
         # 初始化查询系统
+        current_plan_manager = (
+            self.file_plan_manager
+            if processing_mode == "file_level"
+            else self.plan_manager
+        )
         self.query_system = QuerySystem(
-            self.plan_manager, self.contributor_analyzer, self.ignore_manager
+            current_plan_manager, self.contributor_analyzer, self.ignore_manager
         )
 
         # 缓存集成分支名
@@ -114,21 +152,37 @@ class GitMergeOrchestrator:
 
     def analyze_divergence(self):
         """分析分支分叉情况"""
-        result = self.plan_manager.analyze_divergence(
-            self.source_branch, self.target_branch
-        )
+        if self.processing_mode == "file_level":
+            result = self.file_plan_manager.analyze_divergence(
+                self.source_branch, self.target_branch
+            )
+        else:
+            result = self.plan_manager.analyze_divergence(
+                self.source_branch, self.target_branch
+            )
+
         if result:
             self._integration_branch = result["integration_branch"]
         return result
 
     def create_merge_plan(self):
         """创建智能合并计划"""
-        plan = self.plan_manager.create_merge_plan(
-            self.source_branch, self.target_branch, self.max_files_per_group
-        )
-        if plan:
-            self._integration_branch = plan["integration_branch"]
-        return plan
+        if self.processing_mode == "file_level":
+            print(f"🚀 使用文件级处理模式创建合并计划")
+            plan = self.file_plan_manager.create_file_merge_plan(
+                self.source_branch, self.target_branch
+            )
+            if plan:
+                self._integration_branch = plan["integration_branch"]
+            return plan
+        else:
+            print(f"📋 使用传统组模式创建合并计划")
+            plan = self.plan_manager.create_merge_plan(
+                self.source_branch, self.target_branch, self.max_files_per_group
+            )
+            if plan:
+                self._integration_branch = plan["integration_branch"]
+            return plan
 
     def auto_assign_tasks(
         self,
@@ -136,47 +190,60 @@ class GitMergeOrchestrator:
         max_tasks_per_person=DEFAULT_MAX_TASKS_PER_PERSON,
         include_fallback=True,
     ):
-        """智能自动分配任务（优化版）"""
-        plan = self.file_helper.load_plan()
-        if not plan:
-            DisplayHelper.print_error("合并计划文件不存在，请先运行创建合并计划")
-            return None
-
-        # 使用优化版分配器
-        result = self.task_assigner.turbo_auto_assign_tasks(
-            plan, exclude_authors, max_tasks_per_person, include_fallback
-        )
-
-        if result:
-            # 保存更新后的计划
-            self.file_helper.save_plan(plan)
-
-            # 显示性能优化报告
-            if "performance_stats" in result:
-                perf_report = self.task_assigner.get_optimization_report(
-                    result["performance_stats"]
-                )
-                print(perf_report)
-
-            # 原有的分配总结显示
-            active_contributors = result["active_contributors"]
-            inactive_contributors = result["inactive_contributors"]
-            assignment_count = result["assignment_count"]
-            unassigned_groups = result["unassigned_groups"]
-
-            print(f"\n📊 自动分配总结:")
-            print(f"🎯 活跃贡献者: {len(active_contributors)} 位")
-            print(f"🚫 自动排除: {len(inactive_contributors)} 位（近3个月无提交）")
-            print(f"🔧 手动排除: {len(exclude_authors or [])} 位")
-
-            summary = DisplayHelper.format_assignment_summary(
-                assignment_count, unassigned_groups
+        """智能自动分配任务"""
+        if self.processing_mode == "file_level":
+            print(f"🚀 使用文件级智能分配系统")
+            result = self.file_task_assigner.auto_assign_files(
+                exclude_authors, max_tasks_per_person, include_fallback
             )
-            print(summary)
+            if result:
+                print(f"✅ 文件级分配完成: {result['assigned_count']} 个文件")
+                return result
+            else:
+                DisplayHelper.print_error("文件级计划不存在，请先创建合并计划")
+                return None
+        else:
+            print(f"📋 使用传统组模式分配系统")
+            plan = self.file_helper.load_plan()
+            if not plan:
+                DisplayHelper.print_error("合并计划文件不存在，请先运行创建合并计划")
+                return None
 
-            DisplayHelper.print_success("涡轮增压自动分配完成")
+            # 使用优化版分配器
+            result = self.task_assigner.turbo_auto_assign_tasks(
+                plan, exclude_authors, max_tasks_per_person, include_fallback
+            )
 
-        return plan
+            if result:
+                # 保存更新后的计划
+                self.file_helper.save_plan(plan)
+
+                # 显示性能优化报告
+                if "performance_stats" in result:
+                    perf_report = self.task_assigner.get_optimization_report(
+                        result["performance_stats"]
+                    )
+                    print(perf_report)
+
+                # 原有的分配总结显示
+                active_contributors = result["active_contributors"]
+                inactive_contributors = result["inactive_contributors"]
+                assignment_count = result["assignment_count"]
+                unassigned_groups = result["unassigned_groups"]
+
+                print(f"\n📊 自动分配总结:")
+                print(f"🎯 活跃贡献者: {len(active_contributors)} 位")
+                print(f"🚫 自动排除: {len(inactive_contributors)} 位（近3个月无提交）")
+                print(f"🔧 手动排除: {len(exclude_authors or [])} 位")
+
+                summary = DisplayHelper.format_assignment_summary(
+                    assignment_count, unassigned_groups
+                )
+                print(summary)
+
+                DisplayHelper.print_success("涡轮增压自动分配完成")
+
+            return plan
 
     def manual_assign_tasks(self, assignments):
         """手动分配任务"""
@@ -193,10 +260,14 @@ class GitMergeOrchestrator:
 
     def check_status(self, show_full_names=False):
         """检查合并状态"""
-        if show_full_names:
-            self._show_full_group_names()
+        if self.processing_mode == "file_level":
+            print(f"📊 文件级处理模式状态检查")
+            self.file_plan_manager.check_file_status()
         else:
-            self.plan_manager.check_status()
+            if show_full_names:
+                self._show_full_group_names()
+            else:
+                self.plan_manager.check_status()
 
     def _show_full_group_names(self):
         """显示完整的组名列表"""
@@ -537,6 +608,122 @@ class GitMergeOrchestrator:
 
         return assignee_groups
 
+    def search_files_by_assignee(self, assignee_name):
+        """根据负责人搜索其负责的所有文件（文件级模式）"""
+        if self.processing_mode == "file_level":
+            return self.file_plan_manager.search_files_by_assignee(assignee_name)
+        else:
+            # 传统模式下的兼容性调用
+            return self.search_assignee_tasks(assignee_name)
+
+    def search_files_by_directory(self, directory_path):
+        """根据目录搜索文件（文件级模式）"""
+        if self.processing_mode == "file_level":
+            return self.file_plan_manager.search_files_by_directory(directory_path)
+        else:
+            print("⚠️ 目录搜索功能仅在文件级模式下可用")
+            return []
+
+    def mark_file_completed(self, file_path, notes=""):
+        """标记单个文件为已完成（文件级模式）"""
+        if self.processing_mode == "file_level":
+            return self.file_plan_manager.mark_file_completed(file_path, notes)
+        else:
+            print("⚠️ 文件级标记功能仅在文件级模式下可用")
+            return False
+
+    def mark_directory_completed(self, directory_path):
+        """标记整个目录的文件为已完成（文件级模式）"""
+        if self.processing_mode == "file_level":
+            return self.file_plan_manager.mark_directory_completed(directory_path)
+        else:
+            print("⚠️ 目录级标记功能仅在文件级模式下可用")
+            return False
+
+    def balance_workload(self, max_tasks_per_person=50):
+        """负载均衡（文件级模式）"""
+        if self.processing_mode == "file_level":
+            return self.file_task_assigner.balance_workload(max_tasks_per_person)
+        else:
+            print("⚠️ 负载均衡功能仅在文件级模式下可用")
+            return 0
+
+    def manual_assign_file(self, file_path, assignee, reason="手动分配"):
+        """手动分配单个文件（文件级模式）"""
+        if self.processing_mode == "file_level":
+            return self.file_task_assigner.manual_assign_file(
+                file_path, assignee, reason
+            )
+        else:
+            print("⚠️ 文件级手动分配功能仅在文件级模式下可用")
+            return False
+
+    def get_processing_mode_info(self):
+        """获取当前处理模式信息"""
+        return {
+            "mode": self.processing_mode,
+            "mode_name": "文件级处理" if self.processing_mode == "file_level" else "传统组模式",
+            "description": "基于文件的精确任务分配和处理"
+            if self.processing_mode == "file_level"
+            else "基于文件组的批量处理",
+            "advantages": [
+                "精确到文件的任务分配",
+                "更细粒度的进度跟踪",
+                "基于文件贡献度的智能分配",
+                "支持负载均衡",
+                "更好的并行处理支持",
+            ]
+            if self.processing_mode == "file_level"
+            else ["批量处理效率高", "减少分支数量", "适合大规模文件变更", "传统Git工作流兼容"],
+            "suitable_for": [
+                "中小型项目 (<100个文件)",
+                "精确控制需求",
+                "多人协作项目",
+                "复杂合并场景",
+                "需要详细进度跟踪",
+            ]
+            if self.processing_mode == "file_level"
+            else ["大型项目 (>100个文件)", "简单合并场景", "快速批量处理", "传统开发流程"],
+        }
+
+    def switch_processing_mode(self):
+        """交互式切换处理模式"""
+        current_mode_info = self.get_processing_mode_info()
+
+        print("🔧 处理模式切换")
+        print("=" * 80)
+        print(f"当前模式: {current_mode_info['mode_name']}")
+        print(f"描述: {current_mode_info['description']}")
+        print()
+
+        new_mode = (
+            "group_based" if self.processing_mode == "file_level" else "file_level"
+        )
+        new_mode_name = "传统组模式" if new_mode == "group_based" else "文件级处理"
+
+        print(f"切换到: {new_mode_name}")
+
+        # 显示切换影响
+        print(f"\n⚠️ 切换影响:")
+        if new_mode == "file_level":
+            print("  • 需要重新创建文件级合并计划")
+            print("  • 现有组分配将不可用")
+            print("  • 可以使用更精确的文件级功能")
+        else:
+            print("  • 需要重新创建组级合并计划")
+            print("  • 现有文件分配将不可用")
+            print("  • 回到传统的组处理模式")
+
+        confirm = input(f"\n确定要切换到 {new_mode_name} 吗? (y/N): ").strip().lower()
+        if confirm == "y":
+            self.processing_mode = new_mode
+            print(f"✅ 已切换到 {new_mode_name}")
+            print(f"💡 请重新创建合并计划以使用新模式")
+            return True
+        else:
+            print("❌ 已取消切换")
+            return False
+
     def merge_group(self, group_name):
         """合并指定组的文件 - 根据当前策略选择执行器"""
         if not self.integration_branch:
@@ -617,25 +804,37 @@ class GitMergeOrchestrator:
     def get_plan_summary(self):
         """获取计划摘要信息"""
         try:
-            plan = self.file_helper.load_plan()
-            if not plan:
-                return None
+            if self.processing_mode == "file_level":
+                # 文件级模式摘要
+                summary = self.file_plan_manager.get_plan_summary()
+                if summary:
+                    strategy_info = self.get_merge_strategy_info()
+                    summary["merge_strategy"] = strategy_info
+                    summary["processing_mode"] = "file_level"
+                return summary
+            else:
+                # 传统组模式摘要
+                plan = self.file_helper.load_plan()
+                if not plan:
+                    return None
 
-            stats = self.file_helper.get_completion_stats(plan)
-            workload = self.contributor_analyzer.get_workload_distribution(plan)
-            strategy_info = self.get_merge_strategy_info()
+                stats = self.file_helper.get_completion_stats(plan)
+                workload = self.contributor_analyzer.get_workload_distribution(plan)
+                strategy_info = self.get_merge_strategy_info()
 
-            return {
-                "plan": plan,
-                "stats": stats,
-                "workload": workload,
-                "source_branch": self.source_branch,
-                "target_branch": self.target_branch,
-                "integration_branch": self.integration_branch,
-                "merge_strategy": strategy_info,
-            }
+                return {
+                    "plan": plan,
+                    "stats": stats,
+                    "workload": workload,
+                    "source_branch": self.source_branch,
+                    "target_branch": self.target_branch,
+                    "integration_branch": self.integration_branch,
+                    "merge_strategy": strategy_info,
+                    "processing_mode": "group_based",
+                }
         except Exception as e:
             # 如果获取摘要失败，返回None而不是抛出异常
+            print(f"⚠️ 获取计划摘要失败: {e}")
             return None
 
     def show_merge_strategy_status(self):
