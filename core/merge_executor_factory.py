@@ -29,11 +29,11 @@ class MergeExecutorFactory:
             try:
                 with open(self.config_file, "r", encoding="utf-8") as f:
                     config = json.load(f)
-                    self._current_mode = config.get("merge_strategy", self.STANDARD_MODE)
+                    self._current_mode = config.get("merge_strategy", self.LEGACY_MODE)
             except:
-                self._current_mode = self.STANDARD_MODE
+                self._current_mode = self.LEGACY_MODE
         else:
-            self._current_mode = self.STANDARD_MODE
+            self._current_mode = self.LEGACY_MODE
 
         return self._current_mode
 
@@ -46,7 +46,11 @@ class MergeExecutorFactory:
 
         # 保存到配置文件
         self.config_file.parent.mkdir(exist_ok=True)
-        config = {"merge_strategy": mode, "updated_at": datetime.now().isoformat(), "version": "2.2-optimized"}
+        config = {
+            "merge_strategy": mode,
+            "updated_at": datetime.now().isoformat(),
+            "version": "2.2-optimized",
+        }
 
         try:
             with open(self.config_file, "w", encoding="utf-8") as f:
@@ -96,10 +100,13 @@ class MergeExecutorFactory:
         return descriptions.get(mode, {})
 
     def list_available_modes(self):
-        """列出所有可用模式 - 增强版本"""
+        """列出所有可用模式 - 增强版本 (Legacy优先)"""
         return [
             {"mode": self.LEGACY_MODE, **self.get_mode_description(self.LEGACY_MODE)},
-            {"mode": self.STANDARD_MODE, **self.get_mode_description(self.STANDARD_MODE)},
+            {
+                "mode": self.STANDARD_MODE,
+                **self.get_mode_description(self.STANDARD_MODE),
+            },
         ]
 
     def switch_mode_interactive(self):
@@ -121,11 +128,12 @@ class MergeExecutorFactory:
             print()
 
         # 提供更详细的选择指导
-        print("💡 选择指导:")
+        print("💡 选择指导 (默认推荐Legacy模式):")
         print("   📊 项目规模: 小项目(<10人) → Legacy, 大项目(>10人) → Standard")
         print("   🕒 时间要求: 紧急发布 → Legacy, 常规开发 → Standard")
         print("   🤝 团队信任: 高信任度 → Legacy, 需要审查 → Standard")
         print("   🔧 技术复杂度: 简单修改 → Legacy, 复杂功能 → Standard")
+        print("   🚀 推荐: Legacy模式适合大多数场景，速度快且操作简单")
         print()
 
         try:

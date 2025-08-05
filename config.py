@@ -17,6 +17,77 @@ BATCH_BRANCH_TEMPLATE = "feat/merge-batch-{assignee}-{timestamp}"
 # 工作目录
 WORK_DIR_NAME = ".merge_work"
 PLAN_FILE_NAME = "merge_plan.json"
+IGNORE_FILE_NAME = ".merge_ignore"
+
+# 默认忽略规则配置
+DEFAULT_IGNORE_PATTERNS = [
+    # Python相关
+    "*.pyc",
+    "*.pyo",
+    "*.pyd",
+    "__pycache__/",
+    "*.egg-info/",
+    ".pytest_cache/",
+    ".coverage",
+    ".tox/",
+    "venv/",
+    "env/",
+    # 版本控制
+    ".git/",
+    ".svn/",
+    ".hg/",
+    ".bzr/",
+    # IDE和编辑器
+    ".vscode/",
+    ".idea/",
+    "*.swp",
+    "*.swo",
+    "*~",
+    ".DS_Store",
+    "Thumbs.db",
+    # 构建和日志文件
+    "build/",
+    "dist/",
+    "*.log",
+    "*.tmp",
+    "*.temp",
+    "node_modules/",
+    ".npm/",
+    ".yarn/",
+    # 文档和备份
+    "*.bak",
+    "*.backup",
+    "*.orig",
+    "*.rej",
+    # 二进制文件
+    "*.exe",
+    "*.dll",
+    "*.so",
+    "*.dylib",
+    "*.a",
+    "*.lib",
+    "*.png",
+    "*.jpg",
+    "*.jpeg",
+    "*.gif",
+    "*.bmp",
+    "*.ico",
+    "*.pdf",
+    "*.zip",
+    "*.tar",
+    "*.gz",
+    "*.rar",
+    "*.7z",
+]
+
+# 忽略规则类型
+IGNORE_RULE_TYPES = {
+    "glob": "Glob模式匹配 (支持 *, ?, [])",
+    "regex": "正则表达式匹配",
+    "exact": "精确匹配",
+    "prefix": "前缀匹配",
+    "suffix": "后缀匹配",
+}
 
 # 分组类型
 GROUP_TYPES = {
@@ -54,7 +125,17 @@ TABLE_CONFIGS = {
     "contributor_ranking": {
         "headers": ["排名", "姓名", "近期", "历史", "得分", "活跃状态", "参与组", "分配组", "近期活跃"],
         "widths": [6, 25, 6, 6, 8, 10, 8, 8, 10],
-        "aligns": ["center", "left", "center", "center", "center", "center", "center", "center", "center"],
+        "aligns": [
+            "center",
+            "left",
+            "center",
+            "center",
+            "center",
+            "center",
+            "center",
+            "center",
+            "center",
+        ],
     },
     "assignment_reasons": {
         "headers": ["组名", "负责人", "文件数", "分配类型", "详细原因"],

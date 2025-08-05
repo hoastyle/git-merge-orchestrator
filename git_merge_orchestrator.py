@@ -11,6 +11,7 @@ sys.path.append(str(Path(__file__).parent))
 
 from config import DEFAULT_MAX_FILES_PER_GROUP, DEFAULT_MAX_TASKS_PER_PERSON
 from utils.file_helper import FileHelper
+from utils.ignore_manager import IgnoreManager
 from ui.display_helper import DisplayHelper
 from core.git_operations import GitOperations
 from core.contributor_analyzer import ContributorAnalyzer
@@ -19,6 +20,7 @@ from core.optimized_task_assigner import OptimizedTaskAssigner
 from core.task_assigner import TaskAssigner
 from core.merge_executor_factory import MergeExecutorFactory
 from core.plan_manager import PlanManager
+from core.query_system import QuerySystem
 
 
 class GitMergeOrchestrator:
@@ -36,8 +38,11 @@ class GitMergeOrchestrator:
         self.repo_path = Path(repo_path)
         self.max_files_per_group = max_files_per_group
 
+        # 初始化忽略管理器
+        self.ignore_manager = IgnoreManager(repo_path)
+
         # 初始化核心组件
-        self.git_ops = GitOperations(repo_path)
+        self.git_ops = GitOperations(repo_path, self.ignore_manager)
         self.file_helper = FileHelper(repo_path, max_files_per_group)
         self.contributor_analyzer = OptimizedContributorAnalyzer(self.git_ops)
         self.task_assigner = OptimizedTaskAssigner(self.contributor_analyzer)
@@ -47,6 +52,11 @@ class GitMergeOrchestrator:
 
         self.plan_manager = PlanManager(
             self.git_ops, self.file_helper, self.contributor_analyzer
+        )
+
+        # 初始化查询系统
+        self.query_system = QuerySystem(
+            self.plan_manager, self.contributor_analyzer, self.ignore_manager
         )
 
         # 缓存集成分支名

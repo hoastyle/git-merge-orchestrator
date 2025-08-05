@@ -78,7 +78,9 @@ class MenuManager:
                 stats = summary["stats"]
                 strategy = summary["merge_strategy"]
 
-                print(f"📊 项目状态: {stats['completed_groups']}/{stats['total_groups']} 组已完成")
+                print(
+                    f"📊 项目状态: {stats['completed_groups']}/{stats['total_groups']} 组已完成"
+                )
                 print(f"🔧 当前策略: {strategy['mode_name']}")
 
                 if stats["total_groups"] > 0:
@@ -307,8 +309,12 @@ class MenuManager:
                 print("=" * 40)
                 print(f"📁 总分组数: {stats['total_groups']}")
                 print(f"📄 总文件数: {stats['total_files']}")
-                print(f"👥 已分配组: {stats['assigned_groups']} ({stats['assigned_files']} 文件)")
-                print(f"✅ 已完成组: {stats['completed_groups']} ({stats['completed_files']} 文件)")
+                print(
+                    f"👥 已分配组: {stats['assigned_groups']} ({stats['assigned_files']} 文件)"
+                )
+                print(
+                    f"✅ 已完成组: {stats['completed_groups']} ({stats['completed_files']} 文件)"
+                )
                 print(f"🔧 合并策略: {strategy['mode_name']}")
 
                 if stats["total_groups"] > 0:
@@ -392,7 +398,9 @@ class MenuManager:
         print("🤖 涡轮增压智能自动分配模式 (活跃度过滤+备选方案)")
 
         exclude_input = input("请输入要排除的作者列表 (用逗号分隔，回车跳过): ").strip()
-        exclude_authors = [name.strip() for name in exclude_input.split(",")] if exclude_input else []
+        exclude_authors = (
+            [name.strip() for name in exclude_input.split(",")] if exclude_input else []
+        )
 
         max_tasks_input = input("每人最大任务数 (默认3): ").strip()
         max_tasks = int(max_tasks_input) if max_tasks_input.isdigit() else 3
@@ -400,7 +408,9 @@ class MenuManager:
         fallback_input = input("启用备选分配方案? (Y/n): ").strip().lower()
         include_fallback = fallback_input != "n"
 
-        self.orchestrator.auto_assign_tasks(exclude_authors, max_tasks, include_fallback)
+        self.orchestrator.auto_assign_tasks(
+            exclude_authors, max_tasks, include_fallback
+        )
 
     def _handle_manual_assign_submenu(self):
         """处理手动分配子菜单"""
@@ -511,7 +521,7 @@ class MenuManager:
             elif choice == "c":
                 self._handle_status_management_submenu()
             elif choice == "d":
-                self._handle_config_management_submenu()
+                self._handle_ignore_rules_menu()
             elif choice == "e":
                 self.orchestrator.view_group_details()
             elif choice == "f":
@@ -526,8 +536,9 @@ class MenuManager:
         print("a. 🔧 合并策略管理")
         print("b. ⚡ 缓存管理")
         print("c. ✅ 完成状态管理")
-        print("d. 📋 查看分组详细信息")
-        print("e. 返回主菜单")
+        print("d. 🚫 忽略规则管理")
+        print("e. 📋 查看分组详细信息")
+        print("f. 返回主菜单")
 
     def _handle_merge_strategy_submenu(self):
         """处理合并策略管理子菜单"""
@@ -644,20 +655,22 @@ class MenuManager:
         """处理高级功能菜单"""
         while True:
             self._show_advanced_features_menu()
-            choice = input("\n请选择操作 (a-e): ").strip().lower()
+            choice = input("\n请选择操作 (a-f): ").strip().lower()
 
             if choice == "a":
                 self.orchestrator.show_contributor_analysis()
             elif choice == "b":
                 self._show_performance_report()
             elif choice == "c":
-                self._handle_custom_script_generation()
+                self._handle_query_system_menu()
             elif choice == "d":
-                self._enter_debug_mode()
+                self._handle_custom_script_generation()
             elif choice == "e":
+                self._enter_debug_mode()
+            elif choice == "f":
                 break
             else:
-                DisplayHelper.print_warning("无效选择，请输入a-e")
+                DisplayHelper.print_warning("无效选择，请输入a-f")
 
     def _show_advanced_features_menu(self):
         """显示高级功能菜单"""
@@ -665,9 +678,10 @@ class MenuManager:
         print("=" * 40)
         print("a. 👥 详细贡献者分析")
         print("b. 📊 性能统计报告")
-        print("c. 🛠️ 自定义脚本生成")
-        print("d. 🐛 调试模式")
-        print("e. 返回主菜单")
+        print("c. 🔍 高级查询系统")
+        print("d. 🛠️ 自定义脚本生成")
+        print("e. 🐛 调试模式")
+        print("f. 返回主菜单")
 
     def _show_performance_report(self):
         """显示性能报告"""
@@ -698,7 +712,9 @@ class MenuManager:
 
                 # 效率统计
                 if stats["completed_groups"] > 0:
-                    completion_rate = stats["completed_groups"] / stats["total_groups"] * 100
+                    completion_rate = (
+                        stats["completed_groups"] / stats["total_groups"] * 100
+                    )
                     print(f"   完成率: {completion_rate:.1f}%")
 
             # Git仓库信息
@@ -749,14 +765,20 @@ class MenuManager:
         print(f"   Git版本: {result if result else '获取失败'}")
 
         # 分支信息
-        current_branch = self.orchestrator.git_ops.run_command("git branch --show-current")
+        current_branch = self.orchestrator.git_ops.run_command(
+            "git branch --show-current"
+        )
         print(f"   当前分支: {current_branch if current_branch else '获取失败'}")
 
         # 文件系统
         print(f"\n💾 文件系统:")
         print(f"   工作目录: {self.orchestrator.file_helper.work_dir}")
-        print(f"   工作目录存在: {'✅' if self.orchestrator.file_helper.work_dir.exists() else '❌'}")
-        print(f"   计划文件存在: {'✅' if self.orchestrator.file_helper.plan_file_path.exists() else '❌'}")
+        print(
+            f"   工作目录存在: {'✅' if self.orchestrator.file_helper.work_dir.exists() else '❌'}"
+        )
+        print(
+            f"   计划文件存在: {'✅' if self.orchestrator.file_helper.plan_file_path.exists() else '❌'}"
+        )
 
         # 模块状态
         print(f"\n🧩 模块状态:")
@@ -765,3 +787,682 @@ class MenuManager:
         print(f"   合并执行器工厂: {'✅' if self.orchestrator.merge_executor_factory else '❌'}")
 
         input("\n按回车键退出调试模式...")
+
+    # === 忽略规则管理 ===
+    def _handle_ignore_rules_menu(self):
+        """处理忽略规则管理菜单"""
+        while True:
+            self._show_ignore_rules_menu()
+            choice = input("\n请选择操作 (a-h): ").strip().lower()
+
+            if choice == "a":
+                self._show_ignore_rules_list()
+            elif choice == "b":
+                self._add_ignore_rule()
+            elif choice == "c":
+                self._remove_ignore_rule()
+            elif choice == "d":
+                self._toggle_ignore_rule()
+            elif choice == "e":
+                self._test_ignore_pattern()
+            elif choice == "f":
+                self._export_ignore_file()
+            elif choice == "g":
+                self._show_ignore_stats()
+            elif choice == "h":
+                break
+            else:
+                DisplayHelper.print_warning("无效选择，请输入a-h")
+
+    def _show_ignore_rules_menu(self):
+        """显示忽略规则管理菜单"""
+        print("\n🚫 忽略规则管理")
+        print("=" * 40)
+        print("a. 📋 查看忽略规则列表")
+        print("b. ➕ 添加忽略规则")
+        print("c. ➖ 删除忽略规则")
+        print("d. 🔄 切换规则启用状态")
+        print("e. 🧪 测试忽略模式")
+        print("f. 📤 导出到.merge_ignore文件")
+        print("g. 📊 查看统计信息")
+        print("h. 返回上级菜单")
+
+    def _show_ignore_rules_list(self):
+        """显示忽略规则列表"""
+        print("\n📋 当前忽略规则列表:")
+        print("=" * 80)
+
+        rules = self.orchestrator.ignore_manager.list_rules()
+        if not rules:
+            print("暂无忽略规则")
+            return
+
+        # 按来源分组显示
+        sources = ["default", "ignore_file", "config", "user_added"]
+        source_names = {
+            "default": "🔧 默认规则",
+            "ignore_file": "📄 项目文件",
+            "config": "⚙️ 配置文件",
+            "user_added": "👤 用户添加",
+        }
+
+        for source in sources:
+            source_rules = [r for r in rules if r.get("source") == source]
+            if source_rules:
+                print(f"\n{source_names.get(source, source)}:")
+                print("-" * 60)
+
+                for i, rule in enumerate(source_rules, 1):
+                    status = "✅" if rule.get("enabled", True) else "❌"
+                    pattern = rule["pattern"]
+                    rule_type = rule["type"]
+                    description = rule.get("description", "")
+
+                    print(f"{i:2d}. {status} [{rule_type:5s}] {pattern}")
+                    if description:
+                        print(f"     💬 {description}")
+
+    def _add_ignore_rule(self):
+        """添加忽略规则"""
+        print("\n➕ 添加新的忽略规则")
+        print("=" * 40)
+
+        from config import IGNORE_RULE_TYPES
+
+        # 显示支持的规则类型
+        print("支持的规则类型:")
+        for rule_type, desc in IGNORE_RULE_TYPES.items():
+            print(f"  {rule_type}: {desc}")
+
+        try:
+            pattern = input("\n请输入匹配模式: ").strip()
+            if not pattern:
+                DisplayHelper.print_warning("模式不能为空")
+                return
+
+            rule_type = input("请输入规则类型 (默认: glob): ").strip() or "glob"
+            if rule_type not in IGNORE_RULE_TYPES:
+                DisplayHelper.print_warning(f"不支持的规则类型: {rule_type}")
+                return
+
+            description = input("请输入规则描述 (可选): ").strip()
+
+            # 添加规则
+            if self.orchestrator.ignore_manager.add_rule(
+                pattern, rule_type, description
+            ):
+                DisplayHelper.print_success(f"成功添加忽略规则: {pattern}")
+            else:
+                DisplayHelper.print_error("添加忽略规则失败")
+
+        except KeyboardInterrupt:
+            print("\n操作已取消")
+
+    def _remove_ignore_rule(self):
+        """删除忽略规则"""
+        print("\n➖ 删除忽略规则")
+        print("=" * 40)
+
+        # 显示可删除的规则（排除默认规则）
+        rules = self.orchestrator.ignore_manager.list_rules()
+        removable_rules = [r for r in rules if r.get("source") not in ["default"]]
+
+        if not removable_rules:
+            print("没有可删除的规则（默认规则不能删除）")
+            return
+
+        print("可删除的规则:")
+        for i, rule in enumerate(removable_rules, 1):
+            status = "✅" if rule.get("enabled", True) else "❌"
+            print(f"{i:2d}. {status} [{rule['type']:5s}] {rule['pattern']}")
+
+        try:
+            choice = input(f"\n请选择要删除的规则 (1-{len(removable_rules)}): ").strip()
+            choice_idx = int(choice) - 1
+
+            if 0 <= choice_idx < len(removable_rules):
+                rule = removable_rules[choice_idx]
+                pattern = rule["pattern"]
+                rule_type = rule["type"]
+
+                confirm = input(f"确认删除规则 '{pattern}' ? (y/N): ").strip().lower()
+                if confirm == "y":
+                    if self.orchestrator.ignore_manager.remove_rule(pattern, rule_type):
+                        DisplayHelper.print_success(f"成功删除规则: {pattern}")
+                    else:
+                        DisplayHelper.print_error("删除规则失败")
+                else:
+                    print("删除操作已取消")
+            else:
+                DisplayHelper.print_warning("无效选择")
+
+        except (ValueError, KeyboardInterrupt):
+            print("操作已取消")
+
+    def _toggle_ignore_rule(self):
+        """切换规则启用状态"""
+        print("\n🔄 切换规则启用状态")
+        print("=" * 40)
+
+        rules = self.orchestrator.ignore_manager.list_rules()
+        if not rules:
+            print("暂无忽略规则")
+            return
+
+        print("当前规则:")
+        for i, rule in enumerate(rules, 1):
+            status = "✅ 启用" if rule.get("enabled", True) else "❌ 禁用"
+            print(f"{i:2d}. {status} [{rule['type']:5s}] {rule['pattern']}")
+
+        try:
+            choice = input(f"\n请选择要切换的规则 (1-{len(rules)}): ").strip()
+            choice_idx = int(choice) - 1
+
+            if 0 <= choice_idx < len(rules):
+                rule = rules[choice_idx]
+                pattern = rule["pattern"]
+                rule_type = rule["type"]
+                current_status = "启用" if rule.get("enabled", True) else "禁用"
+                new_status = "禁用" if rule.get("enabled", True) else "启用"
+
+                if self.orchestrator.ignore_manager.toggle_rule(pattern, rule_type):
+                    DisplayHelper.print_success(
+                        f"成功将规则 '{pattern}' 从{current_status}切换为{new_status}"
+                    )
+                else:
+                    DisplayHelper.print_error("切换规则状态失败")
+            else:
+                DisplayHelper.print_warning("无效选择")
+
+        except (ValueError, KeyboardInterrupt):
+            print("操作已取消")
+
+    def _test_ignore_pattern(self):
+        """测试忽略模式"""
+        print("\n🧪 测试忽略模式")
+        print("=" * 40)
+
+        from config import IGNORE_RULE_TYPES
+
+        try:
+            pattern = input("请输入要测试的模式: ").strip()
+            if not pattern:
+                DisplayHelper.print_warning("模式不能为空")
+                return
+
+            rule_type = input("请输入规则类型 (默认: glob): ").strip() or "glob"
+            if rule_type not in IGNORE_RULE_TYPES:
+                DisplayHelper.print_warning(f"不支持的规则类型: {rule_type}")
+                return
+
+            # 获取测试文件列表
+            test_files_input = input("请输入测试文件列表 (用空格分隔): ").strip()
+            if not test_files_input:
+                # 使用默认测试文件
+                test_files = [
+                    "src/main.py",
+                    "src/__pycache__/module.pyc",
+                    "docs/README.md",
+                    ".git/config",
+                    "build/output.log",
+                    "test.tmp",
+                    ".DS_Store",
+                    "node_modules/package/index.js",
+                    "*.py",
+                    "config.json",
+                ]
+                print("使用默认测试文件列表")
+            else:
+                test_files = test_files_input.split()
+
+            # 执行测试
+            result = self.orchestrator.ignore_manager.test_pattern(
+                pattern, rule_type, test_files
+            )
+
+            print(f"\n测试结果:")
+            print(f"模式: {result['pattern']}")
+            print(f"类型: {result['type']}")
+            print(f"匹配数量: {result['match_count']}/{result['total_count']}")
+
+            if result["matched_files"]:
+                print(f"\n✅ 匹配的文件 ({len(result['matched_files'])}个):")
+                for file in result["matched_files"]:
+                    print(f"  - {file}")
+
+            if result["unmatched_files"]:
+                print(f"\n❌ 未匹配的文件 ({len(result['unmatched_files'])}个):")
+                for file in result["unmatched_files"]:
+                    print(f"  - {file}")
+
+        except KeyboardInterrupt:
+            print("\n测试已取消")
+
+    def _export_ignore_file(self):
+        """导出到.merge_ignore文件"""
+        print("\n📤 导出忽略规则到文件")
+        print("=" * 40)
+
+        file_path = input("请输入导出文件路径 (默认: .merge_ignore): ").strip()
+        if not file_path:
+            file_path = None  # 使用默认路径
+
+        try:
+            if self.orchestrator.ignore_manager.export_ignore_file(file_path):
+                actual_path = file_path or ".merge_ignore"
+                DisplayHelper.print_success(f"成功导出忽略规则到: {actual_path}")
+            else:
+                DisplayHelper.print_error("导出失败")
+        except Exception as e:
+            DisplayHelper.print_error(f"导出过程中出现错误: {e}")
+
+    def _show_ignore_stats(self):
+        """显示忽略规则统计信息"""
+        print("\n📊 忽略规则统计信息")
+        print("=" * 40)
+
+        stats = self.orchestrator.ignore_manager.get_rule_stats()
+        rules = self.orchestrator.ignore_manager.list_rules()
+
+        print(f"总规则数: {stats['total_rules']}")
+        print(f"启用规则数: {stats['enabled_rules']}")
+        print(f"禁用规则数: {stats['total_rules'] - stats['enabled_rules']}")
+        print(f"已过滤文件数: {stats.get('ignored_files', 0)}")
+        print(f"最后更新: {stats.get('last_updated', '未知')}")
+
+        # 按来源统计
+        print(f"\n按来源统计:")
+        sources = {}
+        for rule in rules:
+            source = rule.get("source", "unknown")
+            sources[source] = sources.get(source, 0) + 1
+
+        for source, count in sources.items():
+            source_name = {
+                "default": "默认规则",
+                "ignore_file": "项目文件",
+                "config": "配置文件",
+                "user_added": "用户添加",
+            }.get(source, source)
+            print(f"  {source_name}: {count}")
+
+        # 按类型统计
+        print(f"\n按类型统计:")
+        types = {}
+        for rule in rules:
+            rule_type = rule.get("type", "unknown")
+            types[rule_type] = types.get(rule_type, 0) + 1
+
+        for rule_type, count in types.items():
+            print(f"  {rule_type}: {count}")
+
+    # === 查询系统 ===
+    def _handle_query_system_menu(self):
+        """处理查询系统菜单"""
+        while True:
+            self._show_query_system_menu()
+            choice = input("\n请选择查询类型 (a-g): ").strip().lower()
+
+            if choice == "a":
+                self._query_by_assignee()
+            elif choice == "b":
+                self._query_by_file()
+            elif choice == "c":
+                self._query_by_status()
+            elif choice == "d":
+                self._advanced_search()
+            elif choice == "e":
+                self._reverse_query()
+            elif choice == "f":
+                self._show_query_suggestions()
+            elif choice == "g":
+                break
+            else:
+                DisplayHelper.print_warning("无效选择，请输入a-g")
+
+    def _show_query_system_menu(self):
+        """显示查询系统菜单"""
+        print("\n🔍 高级查询系统")
+        print("=" * 40)
+        print("a. 👤 按负责人查询")
+        print("b. 📁 按文件模式查询")
+        print("c. 📊 按状态查询")
+        print("d. 🔧 高级组合查询")
+        print("e. 🔄 反向查询")
+        print("f. 💡 查询建议")
+        print("g. 返回上级菜单")
+
+    def _query_by_assignee(self):
+        """按负责人查询"""
+        print("\n👤 按负责人查询")
+        print("=" * 40)
+
+        try:
+            name = input("请输入负责人姓名或姓名模式: ").strip()
+            if not name:
+                DisplayHelper.print_warning("姓名不能为空")
+                return
+
+            fuzzy = input("是否启用模糊匹配? (Y/n): ").strip().lower()
+            fuzzy_enabled = fuzzy != "n"
+
+            exact = input("是否要求精确匹配? (y/N): ").strip().lower()
+            exact_match = exact == "y"
+
+            print(f"\n🔍 查询中...")
+            result = self.orchestrator.query_system.query_by_assignee(
+                name, fuzzy_enabled, exact_match
+            )
+
+            self._display_query_result(result)
+
+        except KeyboardInterrupt:
+            print("\n查询已取消")
+
+    def _query_by_file(self):
+        """按文件模式查询"""
+        print("\n📁 按文件模式查询")
+        print("=" * 40)
+
+        try:
+            pattern = input("请输入文件路径模式 (支持通配符): ").strip()
+            if not pattern:
+                DisplayHelper.print_warning("文件模式不能为空")
+                return
+
+            fuzzy = input("是否启用模糊匹配? (Y/n): ").strip().lower()
+            fuzzy_enabled = fuzzy != "n"
+
+            regex = input("是否使用正则表达式? (y/N): ").strip().lower()
+            regex_enabled = regex == "y"
+
+            print(f"\n🔍 查询中...")
+            result = self.orchestrator.query_system.query_by_file(
+                pattern, fuzzy_enabled, regex_enabled
+            )
+
+            self._display_query_result(result)
+
+        except KeyboardInterrupt:
+            print("\n查询已取消")
+
+    def _query_by_status(self):
+        """按状态查询"""
+        print("\n📊 按状态查询")
+        print("=" * 40)
+
+        print("可用状态:")
+        print("  pending - 待处理")
+        print("  in_progress - 进行中")
+        print("  completed - 已完成")
+        print("  conflict - 有冲突")
+
+        try:
+            status = input("\n请输入状态名称: ").strip()
+            if not status:
+                DisplayHelper.print_warning("状态不能为空")
+                return
+
+            details = input("是否包含详细信息? (Y/n): ").strip().lower()
+            include_details = details != "n"
+
+            print(f"\n🔍 查询中...")
+            result = self.orchestrator.query_system.query_by_status(
+                status, include_details
+            )
+
+            self._display_query_result(result)
+
+        except KeyboardInterrupt:
+            print("\n查询已取消")
+
+    def _advanced_search(self):
+        """高级组合查询"""
+        print("\n🔧 高级组合查询")
+        print("=" * 40)
+        print("请设置查询条件 (留空跳过该条件):")
+
+        try:
+            criteria = {}
+
+            assignee = input("负责人模式: ").strip()
+            if assignee:
+                criteria["assignee"] = assignee
+
+            file_pattern = input("文件路径模式: ").strip()
+            if file_pattern:
+                criteria["file_pattern"] = file_pattern
+
+            status = input("状态: ").strip()
+            if status:
+                criteria["status"] = status
+
+            min_files = input("最小文件数: ").strip()
+            if min_files and min_files.isdigit():
+                criteria["min_files"] = int(min_files)
+
+            max_files = input("最大文件数: ").strip()
+            if max_files and max_files.isdigit():
+                criteria["max_files"] = int(max_files)
+
+            assignment_reason = input("分配原因模式: ").strip()
+            if assignment_reason:
+                criteria["assignment_reason"] = assignment_reason
+
+            if not criteria:
+                DisplayHelper.print_warning("未设置任何查询条件")
+                return
+
+            print(f"\n🔍 查询中...")
+            result = self.orchestrator.query_system.advanced_search(criteria)
+
+            self._display_query_result(result)
+
+        except KeyboardInterrupt:
+            print("\n查询已取消")
+
+    def _reverse_query(self):
+        """反向查询"""
+        print("\n🔄 反向查询")
+        print("=" * 40)
+        print("请选择要查找的问题类型:")
+        print("  1. 未分配的文件")
+        print("  2. 工作量过重的负责人")
+        print("  3. 空组")
+        print("  4. 有问题的组")
+        print("  5. 全部问题")
+
+        try:
+            choice = input("\n请选择 (1-5): ").strip()
+
+            criteria = {}
+            max_files = 10  # 默认最大文件数
+
+            if choice == "1":
+                criteria["unassigned"] = True
+            elif choice == "2":
+                criteria["overloaded"] = True
+                max_input = input("设置最大文件数阈值 (默认10): ").strip()
+                if max_input and max_input.isdigit():
+                    max_files = int(max_input)
+                criteria["max_files"] = max_files
+            elif choice == "3":
+                criteria["empty_groups"] = True
+            elif choice == "4":
+                criteria["problematic"] = True
+            elif choice == "5":
+                criteria.update(
+                    {
+                        "unassigned": True,
+                        "overloaded": True,
+                        "empty_groups": True,
+                        "problematic": True,
+                        "max_files": max_files,
+                    }
+                )
+            else:
+                DisplayHelper.print_warning("无效选择")
+                return
+
+            print(f"\n🔍 分析中...")
+            result = self.orchestrator.query_system.reverse_query(criteria)
+
+            self._display_reverse_query_result(result)
+
+        except KeyboardInterrupt:
+            print("\n查询已取消")
+
+    def _show_query_suggestions(self):
+        """显示查询建议"""
+        print("\n💡 查询建议")
+        print("=" * 40)
+
+        try:
+            partial = input("请输入部分查询内容: ").strip()
+            if not partial:
+                DisplayHelper.print_warning("查询内容不能为空")
+                return
+
+            suggestions = self.orchestrator.query_system.get_query_suggestions(partial)
+
+            if suggestions:
+                print(f"\n基于 '{partial}' 的查询建议:")
+                for i, suggestion in enumerate(suggestions, 1):
+                    print(f"{i:2d}. {suggestion}")
+            else:
+                print("没有找到相关建议")
+
+        except KeyboardInterrupt:
+            print("\n操作已取消")
+
+    def _display_query_result(self, result: dict):
+        """显示查询结果"""
+        if not result.get("success", True):
+            DisplayHelper.print_error(f"查询失败: {result.get('error', '未知错误')}")
+            return
+
+        query_type = result.get("query_type", "unknown")
+        results = result.get("results", [])
+        summary = result.get("summary", {})
+
+        if not results:
+            print("\n📭 没有找到匹配的结果")
+            return
+
+        print(f"\n✅ 查询完成 - {query_type}")
+        print("=" * 60)
+
+        # 显示摘要信息
+        if summary:
+            print("📊 查询摘要:")
+            if "total_groups" in summary:
+                print(f"  匹配组数: {summary['total_groups']}")
+            if "total_files" in summary:
+                print(f"  涉及文件: {summary['total_files']}")
+            if "matched_assignees" in summary:
+                assignees = summary["matched_assignees"]
+                if isinstance(assignees, list):
+                    print(f"  相关负责人: {', '.join(assignees) if assignees else '无'}")
+            if "status_breakdown" in summary:
+                print("  状态分布:")
+                for status, count in summary["status_breakdown"].items():
+                    print(f"    {status}: {count}")
+            print()
+
+        # 显示详细结果
+        print("📋 详细结果:")
+        for i, item in enumerate(results, 1):
+            print(f"\n{i:2d}. 组名: {item.get('group_name', 'N/A')}")
+            print(f"    负责人: {item.get('assignee', 'N/A')}")
+            print(f"    状态: {item.get('status', 'N/A')}")
+
+            if "file_count" in item:
+                print(f"    文件数: {item['file_count']}")
+
+            if "matched_files" in item:
+                matched_files = item["matched_files"]
+                print(f"    匹配文件 ({len(matched_files)}):")
+                for file in matched_files[:5]:  # 只显示前5个
+                    print(f"      - {file}")
+                if len(matched_files) > 5:
+                    print(f"      ... 还有 {len(matched_files) - 5} 个文件")
+
+            if "assignment_reason" in item:
+                reason = item["assignment_reason"]
+                if reason:
+                    print(f"    分配原因: {reason}")
+
+        # 如果结果太多，提示用户
+        if len(results) > 10:
+            print(f"\n... 显示了前 10 个结果，共 {len(results)} 个结果")
+
+    def _display_reverse_query_result(self, result: dict):
+        """显示反向查询结果"""
+        if not result.get("success", True):
+            DisplayHelper.print_error(f"反向查询失败: {result.get('error', '未知错误')}")
+            return
+
+        results = result.get("results", {})
+        summary = result.get("summary", {})
+
+        print(f"\n🔄 反向查询结果")
+        print("=" * 60)
+
+        # 显示摘要
+        issues_found = summary.get("issues_found", 0)
+        if issues_found == 0:
+            print("🎉 没有发现问题，项目状态良好！")
+            return
+
+        print(f"⚠️ 发现 {issues_found} 个问题")
+
+        # 显示建议
+        recommendations = summary.get("recommendations", [])
+        if recommendations:
+            print("\n💡 建议:")
+            for i, rec in enumerate(recommendations, 1):
+                print(f"{i:2d}. {rec}")
+
+        # 显示详细结果
+        if results.get("unassigned_files"):
+            files = results["unassigned_files"]
+            print(f"\n📂 未分配文件 ({len(files)}个):")
+            for file in files[:10]:  # 只显示前10个
+                print(f"  - {file}")
+            if len(files) > 10:
+                print(f"  ... 还有 {len(files) - 10} 个文件")
+
+        if results.get("overloaded_assignees"):
+            overloaded = results["overloaded_assignees"]
+            print(f"\n👥 工作量过重的负责人 ({len(overloaded)}个):")
+            for person in overloaded:
+                ratio = person["overload_ratio"]
+                print(
+                    f"  - {person['assignee']}: {person['file_count']}个文件 "
+                    f"({person['group_count']}个组) [负载: {ratio:.1f}x]"
+                )
+
+        if results.get("empty_groups"):
+            empty = results["empty_groups"]
+            print(f"\n📭 空组 ({len(empty)}个):")
+            for group in empty:
+                print(f"  - {group['group_name']} (负责人: {group['assignee']})")
+
+        if results.get("problematic_groups"):
+            problematic = results["problematic_groups"]
+            print(f"\n⚠️ 有问题的组 ({len(problematic)}个):")
+            for group in problematic:
+                issues = group["issues"]
+                issue_desc = {
+                    "missing_assignee": "缺少负责人",
+                    "no_files": "没有文件",
+                    "invalid_status": "状态无效",
+                }
+                issues_list = []
+                for issue in issues:
+                    if issue:
+                        desc = issue_desc.get(issue, issue)
+                        if desc:
+                            issues_list.append(desc)
+                issues_text = ", ".join(issues_list)
+                print(f"  - {group['group_name']}: {issues_text}")
