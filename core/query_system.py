@@ -33,6 +33,55 @@ class QuerySystem:
 
         # 模糊匹配阈值
         self.fuzzy_threshold = 0.6
+        
+    def _load_plan_data(self):
+        """统一的计划数据加载方法，兼容不同的计划管理器"""
+        try:
+            # 支持不同的计划管理器接口
+            if hasattr(self.plan_manager, 'load_plan'):
+                # FileHelper 或 PlanManager
+                return self.plan_manager.load_plan()
+            elif hasattr(self.plan_manager, 'file_manager') and hasattr(self.plan_manager.file_manager, 'load_file_plan'):
+                # FilePlanManager
+                plan = self.plan_manager.file_manager.load_file_plan()
+                if plan and 'files' in plan:
+                    # 转换文件级计划为组格式以保持兼容性
+                    return self._convert_file_plan_to_group_format(plan)
+                return plan
+            else:
+                print("⚠️ 未识别的计划管理器类型")
+                return None
+        except Exception as e:
+            print(f"⚠️ 加载计划数据失败: {e}")
+            return None
+            
+    def _convert_file_plan_to_group_format(self, file_plan):
+        """将文件级计划转换为组格式以保持查询兼容性"""
+        try:
+            # 创建虚拟组结构
+            groups = []
+            for file_data in file_plan.get('files', []):
+                # 每个文件作为一个组
+                group = {
+                    'name': f"file_{file_data.get('path', 'unknown')}",
+                    'group_name': file_data.get('path', 'unknown'),
+                    'files': [file_data.get('path', 'unknown')],
+                    'assignee': file_data.get('assignee', ''),
+                    'status': file_data.get('status', 'pending'),
+                    'assignment_reason': file_data.get('assignment_reason', ''),
+                    'created_at': file_data.get('created_at', ''),
+                    'updated_at': file_data.get('updated_at', ''),
+                    'file_count': 1
+                }
+                groups.append(group)
+                
+            # 返回转换后的计划
+            converted_plan = dict(file_plan)
+            converted_plan['groups'] = groups
+            return converted_plan
+        except Exception as e:
+            print(f"⚠️ 文件计划转换失败: {e}")
+            return file_plan
 
     def query_by_assignee(
         self, name: str, fuzzy: bool = True, exact_match: bool = False
@@ -54,7 +103,7 @@ class QuerySystem:
             return cached_result
 
         try:
-            plan_data = self.plan_manager.load_plan()
+            plan_data = self._load_plan_data()
             if not plan_data or "groups" not in plan_data:
                 return self._empty_result("没有可用的计划数据")
 
@@ -140,7 +189,7 @@ class QuerySystem:
             return cached_result
 
         try:
-            plan_data = self.plan_manager.load_plan()
+            plan_data = self._load_plan_data()
             if not plan_data or "groups" not in plan_data:
                 return self._empty_result("没有可用的计划数据")
 
@@ -217,7 +266,7 @@ class QuerySystem:
             return cached_result
 
         try:
-            plan_data = self.plan_manager.load_plan()
+            plan_data = self._load_plan_data()
             if not plan_data or "groups" not in plan_data:
                 return self._empty_result("没有可用的计划数据")
 
@@ -289,7 +338,7 @@ class QuerySystem:
             Dict: 查询结果
         """
         try:
-            plan_data = self.plan_manager.load_plan()
+            plan_data = self._load_plan_data()
             if not plan_data or "groups" not in plan_data:
                 return self._empty_result("没有可用的计划数据")
 
@@ -344,7 +393,7 @@ class QuerySystem:
             Dict: 查询结果
         """
         try:
-            plan_data = self.plan_manager.load_plan()
+            plan_data = self._load_plan_data()
             if not plan_data or "groups" not in plan_data:
                 return self._empty_result("没有可用的计划数据")
 
@@ -420,7 +469,7 @@ class QuerySystem:
         suggestions = []
 
         try:
-            plan_data = self.plan_manager.load_plan()
+            plan_data = self._load_plan_data()
             if not plan_data or "groups" not in plan_data:
                 return suggestions
 

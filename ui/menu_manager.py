@@ -336,7 +336,7 @@ class MenuManager:
         """处理项目管理菜单"""
         while True:
             self._show_project_management_menu()
-            choice = input("\n请选择操作 (a-f): ").strip().lower()
+            choice = input("\n请选择操作 (a-g): ").strip().lower()
 
             if choice == "a":
                 self.orchestrator.analyze_divergence()
@@ -349,9 +349,11 @@ class MenuManager:
             elif choice == "e":
                 self._show_project_report()
             elif choice == "f":
+                self._show_unassigned_files()  # 新增处理方法
+            elif choice == "g":
                 break
             else:
-                DisplayHelper.print_warning("无效选择，请输入a-f")
+                DisplayHelper.print_warning("无效选择，请输入a-g")
 
     def _show_project_management_menu(self):
         """显示项目管理菜单"""
@@ -362,7 +364,8 @@ class MenuManager:
         print("c. 📈 检查项目状态")
         print("d. 📊 查看分配原因分析")
         print("e. 📄 生成项目报告")
-        print("f. 返回主菜单")
+        print("f. ⚠️  查看未分配文件")  # 新增快捷入口
+        print("g. 返回主菜单")
 
     def _handle_status_check_submenu(self):
         """处理状态检查子菜单"""
@@ -1644,3 +1647,371 @@ class MenuManager:
                 DisplayHelper.print_error(f"未找到文件: {file_path}")
         else:
             DisplayHelper.print_warning("文件路径不能为空")
+
+    # === 未分配文件管理 ===
+
+    def _show_unassigned_files(self):
+        """显示未分配文件详情和解决方案"""
+        print("\n⚠️ 未分配文件详情分析")
+        print("=" * 60)
+
+        try:
+            # 使用现有的反向查询功能
+            result = self.orchestrator.query_system.reverse_query(
+                {"unassigned": True, "problematic": True}
+            )
+
+            if not result.get("success", True):
+                DisplayHelper.print_error(f"查询失败: {result.get('error', '未知错误')}")
+                return
+
+            unassigned_files = result["results"]["unassigned_files"]
+            problematic_groups = result["results"]["problematic_groups"]
+
+            # 显示统计摘要
+            total_unassigned = len(unassigned_files)
+            print(f"📊 未分配文件统计:")
+            print(f"   🔸 未分配文件总数: {total_unassigned}")
+            print(f"   🔸 有问题的组数: {len(problematic_groups)}")
+
+            if total_unassigned == 0:
+                print("\n✅ 太好了！所有文件都已分配负责人")
+                print("💡 项目分配状态良好，可以开始执行合并操作")
+                return
+
+            # 显示未分配文件列表
+            print(f"\n📋 未分配文件详情:")
+            print("-" * 80)
+
+            for i, file_path in enumerate(unassigned_files[:10], 1):  # 最多显示10个
+                print(f"{i:2d}. {file_path}")
+
+                # 获取该文件的详细未分配原因
+                reason = self._get_file_unassigned_reason(file_path)
+                print(f"     💡 原因: {reason}")
+
+                # 提供解决建议
+                suggestions = self._get_assignment_suggestions(file_path)
+                if suggestions:
+                    print(f"     🔧 建议: {suggestions}")
+                print()
+
+            if total_unassigned > 10:
+                print(f"     ... 还有 {total_unassigned - 10} 个文件未显示")
+
+            # 显示问题组详情
+            if problematic_groups:
+                print(f"\n🚨 有问题的组详情:")
+                print("-" * 80)
+                for group in problematic_groups[:5]:  # 最多显示5个
+                    print(f"组名: {group['group_name']}")
+                    print(f"问题: {', '.join(group['issues'])}")
+                    print(f"负责人: {group.get('assignee', '未分配')}")
+                    print()
+
+            # 显示操作选项
+            self._show_unassigned_action_menu(unassigned_files)
+
+        except Exception as e:
+            DisplayHelper.print_error(f"显示未分配文件时出错: {e}")
+
+    def _get_file_unassigned_reason(self, file_path):
+        """获取特定文件的未分配原因"""
+        try:
+            # 找到包含该文件的组
+            plan_data = self.orchestrator.plan_manager.load_plan()
+            if not plan_data:
+                return "无法加载项目计划数据"
+
+            for group in plan_data.get("groups", []):
+                if file_path in group.get("files", []):
+                    assignment_reason = group.get("assignment_reason", "")
+                    if assignment_reason:
+                        return assignment_reason
+                    else:
+                        return "组存在但未记录分配原因"
+
+            return "文件不在任何组中"
+        except Exception as e:
+            return f"无法获取原因: {str(e)}"
+
+    def _get_assignment_suggestions(self, file_path):
+        """为特定文件获取分配建议"""
+        suggestions = []
+
+        try:
+            # 基于文件路径给出建议
+            if "/test" in file_path or file_path.endswith(("_test.py", ".test.js")):
+                suggestions.append("建议分配给测试负责人或原代码作者")
+            elif "/doc" in file_path or file_path.endswith((".md", ".txt", ".rst")):
+                suggestions.append("建议分配给文档维护者")
+            elif file_path.endswith((".json", ".yml", ".yaml", ".xml")):
+                suggestions.append("建议分配给配置管理负责人")
+            elif "/api" in file_path or "/service" in file_path:
+                suggestions.append("建议分配给后端开发负责人")
+            elif "/ui" in file_path or "/component" in file_path:
+                suggestions.append("建议分配给前端开发负责人")
+            else:
+                suggestions.append("建议手动审查文件内容后指定负责人")
+
+            return " | ".join(suggestions)
+        except:
+            return "请手动指定负责人"
+
+    def _show_unassigned_action_menu(self, unassigned_files):
+        """显示未分配文件的操作菜单"""
+        if not unassigned_files:
+            return
+
+        print(f"\n🎯 解决方案选项:")
+        print("-" * 40)
+        print("1. 💪 手动分配特定文件")
+        print("2. 🔄 重新运行自动分配")
+        print("3. 📋 导出未分配文件列表")
+        print("4. 🚫 将某些文件加入忽略列表")
+        print("5. 📊 查看候选负责人详情")
+        print("0. 返回上级菜单")
+
+        while True:
+            try:
+                choice = input("\n请选择解决方案 (0-5): ").strip()
+
+                if choice == "0":
+                    break
+                elif choice == "1":
+                    self._manual_assign_files(unassigned_files)
+                elif choice == "2":
+                    self._rerun_auto_assignment()
+                elif choice == "3":
+                    self._export_unassigned_files(unassigned_files)
+                elif choice == "4":
+                    self._add_files_to_ignore(unassigned_files)
+                elif choice == "5":
+                    self._show_candidate_assignees()
+                else:
+                    print("⚠️ 无效选择，请输入0-5")
+
+            except KeyboardInterrupt:
+                print("\n操作已取消")
+                break
+
+    def _manual_assign_files(self, unassigned_files):
+        """手动分配文件"""
+        print(f"\n💪 手动分配文件")
+        print("=" * 40)
+
+        # 显示前10个未分配文件供选择
+        print("请选择要分配的文件:")
+        display_files = unassigned_files[:10]
+        for i, file_path in enumerate(display_files, 1):
+            print(f"{i}. {file_path}")
+
+        try:
+            file_choice = input(f"\n请选择文件序号 (1-{len(display_files)}): ").strip()
+            if (
+                not file_choice.isdigit()
+                or int(file_choice) < 1
+                or int(file_choice) > len(display_files)
+            ):
+                print("❌ 无效的文件序号")
+                return
+
+            selected_file = display_files[int(file_choice) - 1]
+            print(f"已选择文件: {selected_file}")
+
+            # 获取可用的负责人列表
+            available_assignees = self._get_available_assignees()
+            if not available_assignees:
+                print("❌ 没有可用的负责人")
+                return
+
+            print("\n可用负责人:")
+            for i, assignee in enumerate(available_assignees, 1):
+                print(f"{i}. {assignee}")
+
+            assignee_choice = input(
+                f"\n请选择负责人序号 (1-{len(available_assignees)}): "
+            ).strip()
+            if (
+                not assignee_choice.isdigit()
+                or int(assignee_choice) < 1
+                or int(assignee_choice) > len(available_assignees)
+            ):
+                print("❌ 无效的负责人序号")
+                return
+
+            selected_assignee = available_assignees[int(assignee_choice) - 1]
+
+            # 执行分配
+            success = self._assign_file_to_person(selected_file, selected_assignee)
+            if success:
+                print(f"✅ 成功将 {selected_file} 分配给 {selected_assignee}")
+            else:
+                print(f"❌ 分配失败")
+
+        except KeyboardInterrupt:
+            print("\n操作已取消")
+        except Exception as e:
+            print(f"❌ 操作出错: {e}")
+
+    def _get_available_assignees(self):
+        """获取可用的负责人列表"""
+        try:
+            # 从项目计划中获取所有已知的负责人
+            plan_data = self.orchestrator.plan_manager.load_plan()
+            if not plan_data:
+                return []
+
+            assignees = set()
+            for group in plan_data.get("groups", []):
+                assignee = group.get("assignee", "")
+                if assignee and assignee != "未分配":
+                    assignees.add(assignee)
+
+            # 也可以从贡献者分析中获取活跃贡献者
+            if hasattr(self.orchestrator, "task_assigner") and hasattr(
+                self.orchestrator.task_assigner, "contributor_analyzer"
+            ):
+                active_contributors = (
+                    self.orchestrator.task_assigner.contributor_analyzer.get_active_contributors()
+                )
+                assignees.update(active_contributors)
+
+            return sorted(list(assignees))
+        except:
+            return []
+
+    def _assign_file_to_person(self, file_path, assignee):
+        """将文件分配给指定负责人"""
+        try:
+            plan_data = self.orchestrator.plan_manager.load_plan()
+            if not plan_data:
+                return False
+
+            # 查找包含该文件的组
+            for group in plan_data.get("groups", []):
+                if file_path in group.get("files", []):
+                    group["assignee"] = assignee
+                    group["assignment_reason"] = "手动分配"
+                    group["status"] = "assigned"
+
+                    # 保存更新后的计划
+                    self.orchestrator.plan_manager.save_plan(plan_data)
+                    return True
+
+            return False
+        except Exception as e:
+            print(f"分配过程中出错: {e}")
+            return False
+
+    def _rerun_auto_assignment(self):
+        """重新运行自动分配"""
+        print(f"\n🔄 重新运行自动分配")
+        print("=" * 40)
+
+        try:
+            confirm = input("这将重新分析所有未分配的文件，确定继续吗？(y/N): ").strip().lower()
+            if confirm != "y":
+                print("操作已取消")
+                return
+
+            # 调用自动分配功能
+            result = self.orchestrator.auto_assign_tasks()
+            if result:
+                print("✅ 自动分配完成，请重新检查分配结果")
+            else:
+                print("❌ 自动分配失败，请检查项目状态")
+
+        except Exception as e:
+            print(f"❌ 重新分配过程中出错: {e}")
+
+    def _export_unassigned_files(self, unassigned_files):
+        """导出未分配文件列表"""
+        print(f"\n📋 导出未分配文件列表")
+        print("=" * 40)
+
+        try:
+            from datetime import datetime
+
+            filename = (
+                f"unassigned_files_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+            )
+
+            with open(filename, "w", encoding="utf-8") as f:
+                f.write(f"# 未分配文件列表\n")
+                f.write(f"# 生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"# 总计: {len(unassigned_files)} 个文件\n\n")
+
+                for file_path in unassigned_files:
+                    reason = self._get_file_unassigned_reason(file_path)
+                    f.write(f"{file_path}\n")
+                    f.write(f"  原因: {reason}\n\n")
+
+            print(f"✅ 已导出到文件: {filename}")
+            print(f"📊 包含 {len(unassigned_files)} 个未分配文件的详细信息")
+
+        except Exception as e:
+            print(f"❌ 导出失败: {e}")
+
+    def _add_files_to_ignore(self, unassigned_files):
+        """将文件添加到忽略列表"""
+        print(f"\n🚫 将文件加入忽略列表")
+        print("=" * 40)
+        print("注意: 被忽略的文件将不会参与后续的分配和合并操作")
+
+        # 这里需要实现忽略功能，暂时给出提示
+        print("🔧 此功能需要配合忽略规则管理系统使用")
+        print("💡 建议通过 主菜单 → 系统管理 → 忽略规则管理 来配置")
+
+    def _show_candidate_assignees(self):
+        """显示候选负责人详情"""
+        print(f"\n📊 候选负责人详情")
+        print("=" * 40)
+
+        try:
+            assignees = self._get_available_assignees()
+            if not assignees:
+                print("❌ 没有找到可用的负责人")
+                return
+
+            print(f"📋 共发现 {len(assignees)} 个候选负责人:")
+            for i, assignee in enumerate(assignees, 1):
+                # 获取负责人的工作负载统计
+                workload = self._get_assignee_workload(assignee)
+                print(f"{i:2d}. {assignee}")
+                print(f"     当前负责组数: {workload['groups']}")
+                print(f"     当前负责文件数: {workload['files']}")
+                print(f"     工作负载状态: {workload['status']}")
+                print()
+
+        except Exception as e:
+            print(f"❌ 获取候选人信息时出错: {e}")
+
+    def _get_assignee_workload(self, assignee):
+        """获取负责人的工作负载统计"""
+        try:
+            plan_data = self.orchestrator.plan_manager.load_plan()
+            if not plan_data:
+                return {"groups": 0, "files": 0, "status": "未知"}
+
+            groups = 0
+            files = 0
+
+            for group in plan_data.get("groups", []):
+                if group.get("assignee") == assignee:
+                    groups += 1
+                    files += len(group.get("files", []))
+
+            # 简单的负载状态判断
+            if files == 0:
+                status = "🟢 空闲"
+            elif files <= 10:
+                status = "🟡 适中"
+            elif files <= 20:
+                status = "🟠 较重"
+            else:
+                status = "🔴 过重"
+
+            return {"groups": groups, "files": files, "status": status}
+        except:
+            return {"groups": 0, "files": 0, "status": "未知"}

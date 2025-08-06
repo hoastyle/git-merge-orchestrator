@@ -38,7 +38,9 @@ class OptimizedTaskAssigner:
         print("🔍 自动排除近3个月无提交的人员")
 
         # Step 1: 批量获取活跃贡献者（优化）
-        active_contributors = self.contributor_analyzer.get_active_contributors(DEFAULT_ACTIVE_MONTHS)
+        active_contributors = self.contributor_analyzer.get_active_contributors(
+            DEFAULT_ACTIVE_MONTHS
+        )
 
         # Step 2: 批量获取所有贡献者（优化）
         all_contributors = self.contributor_analyzer.get_all_contributors()
@@ -56,7 +58,9 @@ class OptimizedTaskAssigner:
 
         # Step 3: 并行分析所有组的贑献者信息（核心优化）
         print(f"⚡ 开始并行分析 {len(plan['groups'])} 个组的贡献者...")
-        group_analysis_results = self.contributor_analyzer.parallel_analyze_groups(plan["groups"])
+        group_analysis_results = self.contributor_analyzer.parallel_analyze_groups(
+            plan["groups"]
+        )
 
         # Step 4: 快速分配任务
         assignment_count = {}
@@ -133,6 +137,10 @@ class OptimizedTaskAssigner:
         print(f"   - 缓存目录数: {perf_stats['cached_directories']}")
         print(f"   - 批量计算: {'✅' if perf_stats['batch_computed'] else '❌'}")
 
+        # 自动显示未分配文件摘要
+        if unassigned_groups:
+            self._show_unassigned_summary(unassigned_groups, plan)
+
         return {
             "assignment_count": assignment_count,
             "unassigned_groups": unassigned_groups,
@@ -140,7 +148,10 @@ class OptimizedTaskAssigner:
             "inactive_contributors": inactive_contributors,
             "performance_stats": {
                 "elapsed_seconds": elapsed,
-                "cache_hit_rate": perf_stats["cached_files"] / len(plan.get("groups", [])) if plan.get("groups") else 0,
+                "cache_hit_rate": perf_stats["cached_files"]
+                / len(plan.get("groups", []))
+                if plan.get("groups")
+                else 0,
                 **perf_stats,
             },
         }
@@ -155,15 +166,20 @@ class OptimizedTaskAssigner:
         main_contributor,
     ):
         """尝试负载均衡分配"""
-        sorted_contributors = sorted(all_contributors.items(), key=lambda x: x[1]["score"], reverse=True)
+        sorted_contributors = sorted(
+            all_contributors.items(), key=lambda x: x[1]["score"], reverse=True
+        )
 
         for author, stats in sorted_contributors[1:]:  # 跳过主要贡献者
-            if author not in all_excluded and assignment_count.get(author, 0) < max_tasks_per_person:
+            if (
+                author not in all_excluded
+                and assignment_count.get(author, 0) < max_tasks_per_person
+            ):
                 group["assignee"] = author
                 assignment_count[author] = assignment_count.get(author, 0) + 1
-                group["assignment_reason"] = (
-                    f"负载均衡分配 (原推荐{main_contributor}已满负荷, 一年内:{stats['recent_commits']}, 历史:{stats['total_commits']}, 得分:{stats['score']})"
-                )
+                group[
+                    "assignment_reason"
+                ] = f"负载均衡分配 (原推荐{main_contributor}已满负荷, 一年内:{stats['recent_commits']}, 历史:{stats['total_commits']}, 得分:{stats['score']})"
                 print(f"    ✅ 负载均衡分配给: {author} (得分: {stats['score']})")
                 return True
 
@@ -190,9 +206,9 @@ class OptimizedTaskAssigner:
                 group["assignee"] = fallback_assignee
                 assignment_count[fallback_assignee] = current_count + 1
                 group["fallback_reason"] = f"通过{fallback_source}目录分析分配"
-                group["assignment_reason"] = (
-                    f"备选目录分配 (来源:{fallback_source}, 一年内:{fallback_stats['recent_commits']}, 历史:{fallback_stats['total_commits']}, 得分:{fallback_stats['score']})"
-                )
+                group[
+                    "assignment_reason"
+                ] = f"备选目录分配 (来源:{fallback_source}, 一年内:{fallback_stats['recent_commits']}, 历史:{fallback_stats['total_commits']}, 得分:{fallback_stats['score']})"
                 print(
                     f"    ✅ 备选分配给: {fallback_assignee} (来源: {fallback_source}, 得分: {fallback_stats['score']})"
                 )
@@ -220,12 +236,79 @@ class OptimizedTaskAssigner:
         else:
             return "无法确定主要贡献者"
 
-    def batch_get_assignment_suggestions(self, groups, active_contributors, max_tasks_per_person, current_assignments):
+    def _show_unassigned_summary(self, unassigned_groups, plan):
+        """显示未分配文件摘要"""
+        print(f"\n⚠️ 未分配文件摘要")
+        print("=" * 50)
+
+        # 收集未分配文件
+        unassigned_files = []
+        reasons_count = {}
+
+        for group_name in unassigned_groups:
+            for group in plan.get("groups", []):
+                if group.get("name") == group_name:
+                    files = group.get("files", [])
+                    unassigned_files.extend(files)
+
+                    # 统计未分配原因
+                    reason = group.get("assignment_reason", "未知原因")
+                    reasons_count[reason] = reasons_count.get(reason, 0) + 1
+
+        total_files = sum(
+            len(group.get("files", [])) for group in plan.get("groups", [])
+        )
+        unassigned_count = len(unassigned_files)
+        unassigned_ratio = (
+            (unassigned_count / total_files * 100) if total_files > 0 else 0
+        )
+
+        print(f"📊 统计信息:")
+        print(f"   🔸 未分配组数: {len(unassigned_groups)}")
+        print(f"   🔸 未分配文件数: {unassigned_count}")
+        print(f"   🔸 未分配比例: {unassigned_ratio:.1f}%")
+
+        # 显示主要原因
+        if reasons_count:
+            print(f"\n📋 主要原因:")
+            sorted_reasons = sorted(
+                reasons_count.items(), key=lambda x: x[1], reverse=True
+            )
+            for reason, count in sorted_reasons[:3]:  # 显示前3个主要原因
+                print(f"   • {reason}: {count} 个组")
+
+        # 显示部分未分配文件
+        if unassigned_files:
+            print(f"\n📄 部分未分配文件 (显示前5个):")
+            for i, file_path in enumerate(unassigned_files[:5], 1):
+                print(f"   {i}. {file_path}")
+
+            if len(unassigned_files) > 5:
+                print(f"   ... 还有 {len(unassigned_files) - 5} 个文件")
+
+        # 提供解决方案建议
+        print(f"\n💡 解决建议:")
+        print("   1. 通过 主菜单 → 项目管理 → 查看未分配文件 查看详情")
+        print("   2. 可以手动分配文件或调整排除列表")
+        print("   3. 考虑降低活跃贡献者筛选条件")
+
+        if unassigned_ratio > 20:
+            print("   ⚠️ 未分配比例较高，建议检查项目配置")
+        elif unassigned_ratio > 10:
+            print("   💡 建议适当调整自动分配策略")
+        else:
+            print("   ✅ 大部分文件已成功分配")
+
+    def batch_get_assignment_suggestions(
+        self, groups, active_contributors, max_tasks_per_person, current_assignments
+    ):
         """批量获取分配建议"""
         print(f"💡 正在为 {len(groups)} 个组生成分配建议...")
 
         # 批量分析所有组
-        group_analysis_results = self.contributor_analyzer.parallel_analyze_groups(groups)
+        group_analysis_results = self.contributor_analyzer.parallel_analyze_groups(
+            groups
+        )
 
         suggestions = {}
         for group in groups:
@@ -237,7 +320,9 @@ class OptimizedTaskAssigner:
             group_suggestions = []
             if all_contributors:
                 # 按得分排序
-                sorted_contributors = sorted(all_contributors.items(), key=lambda x: x[1]["score"], reverse=True)
+                sorted_contributors = sorted(
+                    all_contributors.items(), key=lambda x: x[1]["score"], reverse=True
+                )
 
                 for author, stats in sorted_contributors[:5]:  # 前5名
                     is_active = author in active_contributors
@@ -302,7 +387,9 @@ class OptimizedTaskAssigner:
                 if suggestion["can_assign"] and suggestion["is_active"]:
                     group["assignee"] = suggestion["author"]
                     group["assignment_reason"] = "智能负载重平衡分配"
-                    assignment_count[suggestion["author"]] = assignment_count.get(suggestion["author"], 0) + 1
+                    assignment_count[suggestion["author"]] = (
+                        assignment_count.get(suggestion["author"], 0) + 1
+                    )
                     print(f" ✅ 重新分配组 {group['name']} 给 {suggestion['author']}")
                     break
             else:
@@ -340,7 +427,9 @@ class OptimizedTaskAssigner:
         include_fallback=True,
     ):
         """自动分配任务（兼容接口，使用优化版本）"""
-        return self.turbo_auto_assign_tasks(plan, exclude_authors, max_tasks_per_person, include_fallback)
+        return self.turbo_auto_assign_tasks(
+            plan, exclude_authors, max_tasks_per_person, include_fallback
+        )
 
     def manual_assign_tasks(self, plan, assignments):
         """手动分配任务（保持不变）"""
