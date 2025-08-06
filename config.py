@@ -78,6 +78,8 @@ DEFAULT_IGNORE_PATTERNS = [
     "*.gz",
     "*.rar",
     "*.7z",
+    # customize
+    "settings/",
 ]
 
 # 忽略规则类型
@@ -146,6 +148,32 @@ TABLE_CONFIGS = {
         "headers": ["组名", "文件数", "状态", "类型", "分配原因"],
         "widths": [45, 8, 8, 18, 40],
         "aligns": ["left", "center", "center", "left", "left"],
+    },
+    # 文件级视图表格配置
+    "file_status_overview": {
+        "headers": ["文件路径", "目录", "负责人", "状态", "优先级", "分配原因"],
+        "widths": [50, 25, 20, 8, 8, 35],
+        "aligns": ["left", "left", "left", "center", "center", "left"],
+    },
+    "file_list": {
+        "headers": ["序号", "文件路径", "扩展名", "负责人", "状态", "完成时间"],
+        "widths": [6, 55, 8, 20, 8, 20],
+        "aligns": ["center", "left", "center", "left", "center", "left"],
+    },
+    "directory_summary": {
+        "headers": ["目录", "总文件", "已分配", "已完成", "完成率", "负责人数"],
+        "widths": [40, 8, 8, 8, 10, 10],
+        "aligns": ["left", "center", "center", "center", "center", "center"],
+    },
+    "workload_distribution": {
+        "headers": ["负责人", "分配文件", "已完成", "待处理", "完成率", "最新分配"],
+        "widths": [25, 10, 8, 8, 10, 20],
+        "aligns": ["left", "center", "center", "center", "center", "left"],
+    },
+    "file_contributors": {
+        "headers": ["文件路径", "主要贡献者", "得分", "近期提交", "历史提交", "活跃状态"],
+        "widths": [45, 20, 8, 10, 10, 10],
+        "aligns": ["left", "left", "center", "center", "center", "center"],
     },
 }
 

@@ -73,29 +73,59 @@ class MenuManager:
     def _show_project_summary(self):
         """显示项目状态摘要"""
         try:
+            # 显示处理模式信息
+            mode_info = self.orchestrator.get_processing_mode_info()
+            print(f"🔧 处理模式: {mode_info['mode_name']}")
+
             summary = self.orchestrator.get_plan_summary()
-            if summary and summary.get("stats"):
-                stats = summary["stats"]
+            if summary:
                 strategy = summary["merge_strategy"]
+                print(f"⚙️ 合并策略: {strategy['mode_name']}")
 
-                print(
-                    f"📊 项目状态: {stats['completed_groups']}/{stats['total_groups']} 组已完成"
-                )
-                print(f"🔧 当前策略: {strategy['mode_name']}")
+                if self.orchestrator.processing_mode == "file_level":
+                    # 文件级模式显示
+                    stats = summary.get("completion_stats", {})
+                    if stats.get("total_files", 0) > 0:
+                        print(
+                            f"📊 项目状态: {stats['completed_files']}/{stats['total_files']} 文件已完成"
+                        )
+                        progress = stats.get("completion_rate", 0)
+                        print(f"📈 完成进度: {progress:.1f}%")
 
-                if stats["total_groups"] > 0:
-                    progress = stats["completed_groups"] / stats["total_groups"] * 100
-                    print(f"📈 完成进度: {progress:.1f}%")
-
-                    # 显示下一步建议
-                    if stats["assigned_groups"] == 0:
-                        print("💡 建议: 创建计划后进行任务分配")
-                    elif stats["completed_groups"] == 0:
-                        print("💡 建议: 开始执行合并操作")
-                    elif stats["completed_groups"] < stats["total_groups"]:
-                        print("💡 建议: 继续合并剩余任务")
+                        # 显示下一步建议
+                        if stats["assigned_files"] == 0:
+                            print("💡 建议: 创建文件级计划后进行任务分配")
+                        elif stats["completed_files"] == 0:
+                            print("💡 建议: 开始处理分配的文件")
+                        elif stats["completed_files"] < stats["total_files"]:
+                            print("💡 建议: 继续完成剩余文件")
+                        else:
+                            print("💡 建议: 执行最终合并")
                     else:
-                        print("💡 建议: 执行最终合并")
+                        print("📊 项目状态: 尚未创建文件级合并计划")
+                else:
+                    # 传统组模式显示
+                    stats = summary.get("stats", {})
+                    if stats.get("total_groups", 0) > 0:
+                        print(
+                            f"📊 项目状态: {stats['completed_groups']}/{stats['total_groups']} 组已完成"
+                        )
+                        progress = (
+                            stats["completed_groups"] / stats["total_groups"] * 100
+                        )
+                        print(f"📈 完成进度: {progress:.1f}%")
+
+                        # 显示下一步建议
+                        if stats["assigned_groups"] == 0:
+                            print("💡 建议: 创建计划后进行任务分配")
+                        elif stats["completed_groups"] == 0:
+                            print("💡 建议: 开始执行合并操作")
+                        elif stats["completed_groups"] < stats["total_groups"]:
+                            print("💡 建议: 继续合并剩余任务")
+                        else:
+                            print("💡 建议: 执行最终合并")
+                    else:
+                        print("📊 项目状态: 尚未创建合并计划")
             else:
                 print("📊 项目状态: 尚未创建合并计划")
                 print("💡 建议: 使用快速开始向导或创建合并计划")
@@ -364,7 +394,13 @@ class MenuManager:
         """处理任务分配菜单"""
         while True:
             self._show_task_assignment_menu()
-            choice = input("\n请选择操作 (a-e): ").strip().lower()
+
+            if self.orchestrator.processing_mode == "file_level":
+                valid_choices = "a-i"
+                choice = input(f"\n请选择操作 ({valid_choices}): ").strip().lower()
+            else:
+                valid_choices = "a-f"
+                choice = input(f"\n请选择操作 ({valid_choices}): ").strip().lower()
 
             if choice == "a":
                 self._handle_auto_assign_submenu()
@@ -373,37 +409,61 @@ class MenuManager:
             elif choice == "c":
                 self.orchestrator.show_contributor_analysis()
             elif choice == "d":
-                assignee_name = input("请输入负责人姓名: ").strip()
-                if assignee_name:
-                    self.orchestrator.search_assignee_tasks(assignee_name)
-                else:
-                    DisplayHelper.print_warning("负责人姓名不能为空")
+                self._handle_search_assignee_submenu()
             elif choice == "e":
                 break
+            elif choice == "f":
+                if self.orchestrator.processing_mode == "file_level":
+                    self._handle_search_directory_submenu()
+                else:
+                    self.orchestrator.switch_processing_mode()
+            elif choice == "g" and self.orchestrator.processing_mode == "file_level":
+                self._handle_load_balancing_submenu()
+            elif choice == "h" and self.orchestrator.processing_mode == "file_level":
+                self._handle_file_detail_submenu()
+            elif choice == "i" and self.orchestrator.processing_mode == "file_level":
+                self.orchestrator.switch_processing_mode()
             else:
-                DisplayHelper.print_warning("无效选择，请输入a-e")
+                DisplayHelper.print_warning(f"无效选择，请输入{valid_choices}")
 
     def _show_task_assignment_menu(self):
         """显示任务分配菜单"""
-        print("\n👥 任务分配")
+        mode_name = self.orchestrator.get_processing_mode_info()["mode_name"]
+        print(f"\n👥 任务分配 - {mode_name}")
         print("=" * 40)
-        print("a. 🚀 涡轮增压自动分配")
+        print("a. 🚀 智能自动分配")
         print("b. ✋ 手动分配任务")
         print("c. 📊 查看贡献者分析")
         print("d. 🔍 搜索负责人任务")
+
+        if self.orchestrator.processing_mode == "file_level":
+            print("f. 📁 按目录搜索文件")
+            print("g. ⚖️ 负载均衡")
+            print("h. 📋 查看文件详情")
+            print("i. 🔄 切换处理模式")
+        else:
+            print("f. 🔄 切换处理模式")
+
         print("e. 返回主菜单")
 
     def _handle_auto_assign_submenu(self):
         """处理自动分配子菜单"""
-        print("🤖 涡轮增压智能自动分配模式 (活跃度过滤+备选方案)")
+        if self.orchestrator.processing_mode == "file_level":
+            print("🚀 文件级智能自动分配 (基于文件贡献度分析)")
+        else:
+            print("🤖 涡轮增压智能自动分配模式 (活跃度过滤+备选方案)")
 
         exclude_input = input("请输入要排除的作者列表 (用逗号分隔，回车跳过): ").strip()
         exclude_authors = (
             [name.strip() for name in exclude_input.split(",")] if exclude_input else []
         )
 
-        max_tasks_input = input("每人最大任务数 (默认3): ").strip()
-        max_tasks = int(max_tasks_input) if max_tasks_input.isdigit() else 3
+        if self.orchestrator.processing_mode == "file_level":
+            max_tasks_input = input("每人最大文件数 (默认50): ").strip()
+            max_tasks = int(max_tasks_input) if max_tasks_input.isdigit() else 50
+        else:
+            max_tasks_input = input("每人最大任务数 (默认3): ").strip()
+            max_tasks = int(max_tasks_input) if max_tasks_input.isdigit() else 3
 
         fallback_input = input("启用备选分配方案? (Y/n): ").strip().lower()
         include_fallback = fallback_input != "n"
@@ -1466,3 +1526,64 @@ class MenuManager:
                             issues_list.append(desc)
                 issues_text = ", ".join(issues_list)
                 print(f"  - {group['group_name']}: {issues_text}")
+
+    def _handle_search_assignee_submenu(self):
+        """处理搜索负责人子菜单"""
+        assignee_name = input("请输入负责人姓名: ").strip()
+        if assignee_name:
+            if self.orchestrator.processing_mode == "file_level":
+                self.orchestrator.search_files_by_assignee(assignee_name)
+            else:
+                self.orchestrator.search_assignee_tasks(assignee_name)
+        else:
+            DisplayHelper.print_warning("负责人姓名不能为空")
+
+    def _handle_search_directory_submenu(self):
+        """处理搜索目录子菜单"""
+        if self.orchestrator.processing_mode != "file_level":
+            DisplayHelper.print_warning("目录搜索功能仅在文件级模式下可用")
+            return
+
+        directory_path = input("请输入目录路径: ").strip()
+        if directory_path:
+            self.orchestrator.search_files_by_directory(directory_path)
+        else:
+            DisplayHelper.print_warning("目录路径不能为空")
+
+    def _handle_load_balancing_submenu(self):
+        """处理负载均衡子菜单"""
+        if self.orchestrator.processing_mode != "file_level":
+            DisplayHelper.print_warning("负载均衡功能仅在文件级模式下可用")
+            return
+
+        print("⚖️ 文件级负载均衡")
+        print("重新分配过载用户的文件到负载较轻的用户")
+
+        max_tasks_input = input("每人最大文件数 (默认50): ").strip()
+        max_tasks = int(max_tasks_input) if max_tasks_input.isdigit() else 50
+
+        confirm = input(f"确定要执行负载均衡吗? (y/N): ").strip().lower()
+        if confirm == "y":
+            reassigned_count = self.orchestrator.balance_workload(max_tasks)
+            if reassigned_count > 0:
+                DisplayHelper.print_success(f"负载均衡完成，重新分配了 {reassigned_count} 个文件")
+            else:
+                DisplayHelper.print_info("当前负载分布合理，无需调整")
+        else:
+            DisplayHelper.print_info("已取消负载均衡操作")
+
+    def _handle_file_detail_submenu(self):
+        """处理文件详情查看子菜单"""
+        if self.orchestrator.processing_mode != "file_level":
+            DisplayHelper.print_warning("文件详情功能仅在文件级模式下可用")
+            return
+
+        file_path = input("请输入文件路径: ").strip()
+        if file_path:
+            file_info = self.orchestrator.file_manager.find_file_by_path(file_path)
+            if file_info:
+                DisplayHelper.display_file_detail(file_info)
+            else:
+                DisplayHelper.print_error(f"未找到文件: {file_path}")
+        else:
+            DisplayHelper.print_warning("文件路径不能为空")

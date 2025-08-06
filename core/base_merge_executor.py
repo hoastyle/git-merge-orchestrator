@@ -483,3 +483,214 @@ echo "💡 {self.get_strategy_name()}批量处理最佳实践："
     def _get_batch_strategy_footer_notes(self):
         """获取批量策略特定的脚本结尾说明"""
         pass
+
+    # === 文件级处理方法 ===
+
+    def merge_file(self, file_path, assignee, source_branch, target_branch, integration_branch):
+        """合并单个文件（文件级处理）"""
+        print(f"🎯 准备使用{self.get_strategy_name()}模式合并文件: {file_path}")
+        print(f"👤 负责人: {assignee}")
+        print(f"💡 {self.get_strategy_description()}")
+
+        # 创建文件合并分支
+        branch_name = self.git_ops.create_file_merge_branch(file_path, assignee, integration_branch)
+
+        # 策略特定的文件脚本生成
+        script_content = self.generate_file_merge_script(
+            file_path,
+            assignee,
+            branch_name,
+            source_branch,
+            target_branch,
+        )
+
+        safe_filename = file_path.replace('/', '_').replace(' ', '_')
+        script_file = self.file_helper.create_script_file(
+            f"{self.strategy.value}_merge_file_{safe_filename}",
+            script_content,
+        )
+
+        self._print_file_script_completion_message(script_file, file_path)
+        return True
+
+    def merge_assignee_files(self, assignee_name, source_branch, target_branch, integration_branch):
+        """批量合并指定负责人的所有文件（文件级处理）"""
+        plan = self.file_helper.load_plan()
+        if not plan:
+            print("❌ 合并计划文件不存在，请先运行创建合并计划")
+            return False
+
+        # 获取该负责人的所有文件
+        assignee_files = self.file_helper.get_assignee_files(plan, assignee_name)
+        if not assignee_files:
+            print(f"❌ 负责人 '{assignee_name}' 没有分配的文件")
+            return False
+
+        print(f"🎯 开始{self.get_strategy_name()}批量合并负责人 '{assignee_name}' 的所有文件...")
+        print(f"📋 共 {len(assignee_files)} 个文件")
+        print(f"💡 {self.get_strategy_description()}")
+
+        # 创建批量文件合并分支
+        batch_branch_name = self.git_ops.create_file_batch_merge_branch(assignee_name, integration_branch)
+
+        # 策略特定的批量文件脚本生成
+        script_content = self.generate_file_batch_merge_script(
+            assignee_name,
+            assignee_files,
+            batch_branch_name,
+            source_branch,
+            target_branch,
+        )
+
+        script_file = self.file_helper.create_script_file(
+            f"{self.strategy.value}_merge_file_batch_{assignee_name.replace(' ', '_')}",
+            script_content,
+        )
+
+        self._print_file_batch_script_completion_message(script_file, assignee_files)
+        return True
+
+    # === 文件级抽象方法：子类必须实现 ===
+
+    @abstractmethod
+    def generate_file_merge_script(self, file_path, assignee, branch_name, source_branch, target_branch):
+        """生成单个文件合并脚本（策略特定）"""
+        pass
+
+    @abstractmethod
+    def generate_file_batch_merge_script(
+        self,
+        assignee,
+        assignee_files,
+        batch_branch_name,
+        source_branch,
+        target_branch,
+    ):
+        """生成文件批量合并脚本（策略特定）"""
+        pass
+
+    # === 文件级辅助方法：子类可重写 ===
+
+    def _print_file_script_completion_message(self, script_file, file_path):
+        """打印文件脚本生成完成消息（可重写）"""
+        print(f"✅ 已生成{self.get_strategy_name()}文件合并脚本: {script_file}")
+        print(f"📄 目标文件: {file_path}")
+        print(f"🎯 请执行: ./{script_file}")
+
+    def _print_file_batch_script_completion_message(self, script_file, assignee_files):
+        """打印文件批量脚本生成完成消息（可重写）"""
+        print(f"✅ 已生成{self.get_strategy_name()}文件批量合并脚本: {script_file}")
+        print(f"📄 文件数量: {len(assignee_files)} 个")
+        print(f"🎯 请执行: ./{script_file}")
+
+    def _generate_file_script_header(self, file_path, assignee, branch_name, script_type="单文件"):
+        """生成文件脚本通用头部"""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        return f"""#!/bin/bash
+# {self.get_strategy_name()}模式{script_type}合并脚本 - {file_path} (负责人: {assignee})
+# 策略: {self.get_strategy_description()}
+# 创建时间: {timestamp}
+
+set -e # 遇到错误立即退出
+
+echo "🚀 开始{self.get_strategy_name()}模式{script_type}合并: {file_path}"
+echo "👤 负责人: {assignee}"
+echo "🌿 工作分支: {branch_name}"
+echo "💡 策略说明: {self.get_strategy_description()}"
+echo ""
+
+# 切换到工作分支
+echo "📋 切换到工作分支..."
+git checkout {branch_name}
+"""
+
+    def _generate_file_script_footer(self, file_path, branch_name):
+        """生成文件脚本通用结尾"""
+        return f"""
+echo ""
+echo "📊 处理完成统计："
+echo "  - 目标文件: {file_path}"
+echo "  - 处理状态: $merge_success"
+
+# 显示当前工作区状态
+echo ""
+echo "📋 当前工作区状态："
+git status --short
+
+echo ""
+
+if [ "$merge_success" = true ]; then
+    echo "⏭️ 推荐后续操作："
+    echo " 1. 检查修改: git diff {file_path}"
+    echo " 2. 验证文件内容: cat {file_path} 或在编辑器中打开"
+    echo " 3. 运行相关测试"
+    echo " 4. 添加文件: git add {file_path}"
+    echo " 5. 提交更改: git commit -m '{self.get_strategy_name()} merge file: {file_path}'"
+    echo " 6. 推送分支: git push origin {branch_name}"
+    echo ""
+    echo "🔄 如需回滚: git checkout -- {file_path}"
+else
+    echo "🛠️ 问题排查指南："
+    echo " 1. 检查文件是否存在于源分支: git show {branch_name}:{file_path}"
+    echo " 2. 检查分支状态: git status"
+    echo " 3. 如需重新开始: git checkout -- {file_path}"
+    exit 1
+fi
+
+echo ""
+echo "💡 {self.get_strategy_name()}模式文件处理说明："
+{self._get_file_strategy_footer_notes()}
+"""
+
+    def _generate_file_batch_script_footer(self, assignee, file_count, branch_name):
+        """生成文件批量脚本通用结尾"""
+        return f"""
+echo ""
+echo "📊 文件批量处理完成统计："
+echo "  - 负责人: {assignee}"
+echo "  - 总文件数: {file_count}"
+echo "  - 成功处理: $successful_files 个"
+echo "  - 失败文件: $failed_files 个"
+
+echo ""
+git status --short
+
+echo ""
+
+if [ "$batch_success" = true ]; then
+    echo "⏭️ 推荐文件批量后续操作："
+    echo " 1. 检查所有修改: git diff"
+    echo " 2. 验证关键文件内容"
+    echo " 3. 运行完整测试套件"
+    echo " 4. 选择添加策略："
+    echo "    a) 逐个添加验证 (推荐)"
+    echo "    b) 批量添加: git add ."
+    echo " 5. 提交: git commit -m '{self.get_strategy_name()} batch merge for {assignee}: {file_count} files'"
+    echo " 6. 推送分支: git push origin {branch_name}"
+    echo ""
+    echo "🔄 回滚选项："
+    echo " - 回滚特定文件: git checkout -- <文件路径>"
+    echo " - 完全重置: git reset --hard HEAD"
+else
+    echo "🛠️ 文件批量处理问题排查："
+    echo " 1. 检查失败的文件列表（上方显示）"
+    echo " 2. 逐个验证失败原因"
+    echo " 3. 考虑分批处理减少复杂度"
+    exit 1
+fi
+
+echo ""
+echo "💡 {self.get_strategy_name()}文件批量处理最佳实践："
+{self._get_file_batch_strategy_footer_notes()}
+"""
+
+    @abstractmethod
+    def _get_file_strategy_footer_notes(self):
+        """获取文件级策略特定的脚本结尾说明"""
+        pass
+
+    @abstractmethod
+    def _get_file_batch_strategy_footer_notes(self):
+        """获取文件批量策略特定的脚本结尾说明"""
+        pass

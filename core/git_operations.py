@@ -338,3 +338,111 @@ class GitOperations:
             f"git show-ref --verify --quiet refs/heads/{branch_name}"
         )
         return result is not None
+
+    # === 文件级分支操作方法 ===
+
+    def create_file_merge_branch(self, file_path, assignee, integration_branch):
+        """为单个文件创建合并分支"""
+        # 使用文件路径创建安全的分支名
+        safe_file_name = file_path.replace('/', '-').replace(' ', '_').replace('.', '_')
+        safe_assignee = assignee.replace(' ', '-').replace('.', '_')
+        
+        branch_name = f"feat/merge-file-{safe_file_name}-{safe_assignee}"
+        
+        # 限制分支名长度，避免过长
+        if len(branch_name) > 100:
+            # 只保留文件名的后部分
+            file_suffix = safe_file_name[-30:] if len(safe_file_name) > 30 else safe_file_name
+            branch_name = f"feat/merge-file-{file_suffix}-{safe_assignee}"
+            
+            # 如果还是太长，使用时间戳
+            if len(branch_name) > 100:
+                timestamp = datetime.now().strftime("%m%d_%H%M")
+                branch_name = f"feat/merge-file-{timestamp}-{safe_assignee[:20]}"
+
+        # 创建工作分支
+        self.run_command(f"git checkout {integration_branch}")
+        result = self.run_command(f"git checkout -b {branch_name}")
+
+        if result is not None:
+            print(f"✅ 已创建文件合并分支: {branch_name}")
+        else:
+            print(f"⚠️ 分支 {branch_name} 可能已存在，正在切换")
+            self.run_command(f"git checkout {branch_name}")
+
+        return branch_name
+
+    def create_file_batch_merge_branch(self, assignee, integration_branch):
+        """创建文件批量合并分支"""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_assignee = assignee.replace(' ', '-').replace('.', '_')
+        branch_name = f"feat/merge-file-batch-{safe_assignee}-{timestamp}"
+        
+        # 限制分支名长度
+        if len(branch_name) > 100:
+            short_assignee = safe_assignee[:20]
+            branch_name = f"feat/merge-file-batch-{short_assignee}-{timestamp}"
+
+        self.run_command(f"git checkout {integration_branch}")
+        result = self.run_command(f"git checkout -b {branch_name}")
+
+        if result is None:
+            print(f"⚠️ 分支创建可能失败，尝试切换到现有分支")
+            self.run_command(f"git checkout {branch_name}")
+        else:
+            print(f"✅ 已创建文件批量合并分支: {branch_name}")
+
+        return branch_name
+
+    def get_file_contributors_analysis(self, file_path, months=12):
+        """分析单个文件的贡献者信息"""
+        try:
+            contributors = {}
+
+            # 获取最近N个月的贡献统计
+            cutoff_date = (datetime.now() - timedelta(days=months * 30)).strftime("%Y-%m-%d")
+            recent_cmd = f'git log --follow --since="{cutoff_date}" --format="%an" -- "{file_path}"'
+            recent_result = self.run_command(recent_cmd)
+
+            if recent_result:
+                recent_authors = recent_result.split("\n")
+                recent_author_counts = {}
+                for author in recent_authors:
+                    if author.strip():
+                        recent_author_counts[author] = recent_author_counts.get(author, 0) + 1
+
+                for author, count in recent_author_counts.items():
+                    contributors[author] = {
+                        "total_commits": count,
+                        "recent_commits": count,
+                        "score": count * 3,  # 近期提交权重更高
+                    }
+
+            # 获取总体贡献统计
+            total_cmd = f'git log --follow --format="%an" -- "{file_path}"'
+            total_result = self.run_command(total_cmd)
+
+            if total_result:
+                authors = total_result.split("\n")
+                author_counts = {}
+                for author in authors:
+                    if author.strip():
+                        author_counts[author] = author_counts.get(author, 0) + 1
+
+                for author, count in author_counts.items():
+                    if author in contributors:
+                        contributors[author]["total_commits"] = count
+                        contributors[author]["score"] = (
+                            contributors[author]["recent_commits"] * 3 + count
+                        )
+                    else:
+                        contributors[author] = {
+                            "total_commits": count,
+                            "recent_commits": 0,
+                            "score": count,
+                        }
+
+            return contributors
+        except Exception as e:
+            print(f"分析文件 {file_path} 时出错: {e}")
+            return {}

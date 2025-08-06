@@ -641,6 +641,14 @@ class ComprehensiveTestSuite:
             print("\n🔄 集成测试模块")
             self.test_orchestrator_integration()
 
+        # 文件级处理测试
+        if "file_level" in test_categories:
+            print("\n📄 文件级处理测试")
+            self.test_file_level_processing()
+            self.test_file_level_assignment()
+            self.test_file_level_merge_executors()
+            self.test_file_level_ui_system()
+
         # 错误处理测试
         if "error_handling" in test_categories:
             print("\n🛡️ 错误处理测试")

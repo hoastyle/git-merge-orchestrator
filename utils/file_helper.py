@@ -229,6 +229,33 @@ class FileHelper:
                 assignee_groups.append(group)
         return assignee_groups
 
+    def get_assignee_files(self, plan, assignee_name):
+        """获取指定负责人的所有文件（文件级处理）"""
+        assignee_files = []
+        
+        # 检查是否为文件级计划
+        if plan.get("processing_mode") == "file_level" and "files" in plan:
+            # 文件级计划：从 files 列表中获取
+            for file_info in plan["files"]:
+                if file_info.get("assignee", "").lower() == assignee_name.lower():
+                    assignee_files.append(file_info)
+        else:
+            # 组级计划：从组中提取文件
+            for group in plan.get("groups", []):
+                if group.get("assignee", "").lower() == assignee_name.lower():
+                    # 将组中的文件转换为文件信息结构
+                    for file_path in group.get("files", []):
+                        file_info = {
+                            "path": file_path,
+                            "assignee": group.get("assignee"),
+                            "status": group.get("status", "pending"),
+                            "assignment_reason": group.get("assignment_reason", ""),
+                            "group_name": group.get("name", ""),
+                        }
+                        assignee_files.append(file_info)
+        
+        return assignee_files
+
     def get_unassigned_groups(self, plan):
         """获取未分配的组"""
         return [group for group in plan["groups"] if not group.get("assignee")]

@@ -127,7 +127,10 @@ class DisplayHelper:
         elif table_name == "group_list" and len(max_widths) > 1:
             # 组名列（第1列）
             max_widths[1] = max(45, min(65, max_widths[1] + 2))
-        elif table_name in ["assignment_reasons", "assignee_tasks"] and len(max_widths) > 0:
+        elif (
+            table_name in ["assignment_reasons", "assignee_tasks"]
+            and len(max_widths) > 0
+        ):
             # 组名列（第0列）
             max_widths[0] = max(45, min(65, max_widths[0] + 2))
 
@@ -197,7 +200,9 @@ class DisplayHelper:
         summary = "\n📊 自动分配总结:\n"
         summary += f"👥 任务分配:\n"
 
-        for person, count in sorted(assignment_count.items(), key=lambda x: x[1], reverse=True):
+        for person, count in sorted(
+            assignment_count.items(), key=lambda x: x[1], reverse=True
+        ):
             summary += f" {person}: {count} 个任务\n"
 
         if unassigned_groups:
@@ -215,11 +220,17 @@ class DisplayHelper:
             return ""
 
         distribution = "\n👥 负载分布:\n"
-        sorted_workload = sorted(assignee_workload.items(), key=lambda x: x[1]["files"], reverse=True)
+        sorted_workload = sorted(
+            assignee_workload.items(), key=lambda x: x[1]["files"], reverse=True
+        )
 
         for person, workload in sorted_workload:
-            fallback_info = f"(含{workload['fallback']}个备选)" if workload["fallback"] > 0 else ""
-            distribution += f" {person}: {workload['completed']}/{workload['groups']} 组完成, "
+            fallback_info = (
+                f"(含{workload['fallback']}个备选)" if workload["fallback"] > 0 else ""
+            )
+            distribution += (
+                f" {person}: {workload['completed']}/{workload['groups']} 组完成, "
+            )
             distribution += f"{workload['files']} 个文件 {fallback_info}\n"
 
         return distribution.rstrip()
@@ -251,7 +262,9 @@ class DisplayHelper:
         # 基本信息
         print(f"📊 基本信息:")
         print(f"   组名: {group['name']}")
-        group_type_desc = file_helper.get_group_type_description(group.get("group_type", "unknown"))
+        group_type_desc = file_helper.get_group_type_description(
+            group.get("group_type", "unknown")
+        )
         print(f"   类型: {group.get('group_type', 'unknown')} ({group_type_desc})")
         print(f"   文件数: {group.get('file_count', len(group['files']))} 个")
         print(f"   负责人: {group.get('assignee', '未分配')}")
@@ -285,7 +298,9 @@ class DisplayHelper:
 
             contrib_data = []
             sorted_contributors = sorted(
-                contributors.items(), key=lambda x: x[1]["score"] if isinstance(x[1], dict) else x[1], reverse=True
+                contributors.items(),
+                key=lambda x: x[1]["score"] if isinstance(x[1], dict) else x[1],
+                reverse=True,
             )
 
             for i, (author, stats) in enumerate(sorted_contributors[:10], 1):
@@ -294,13 +309,22 @@ class DisplayHelper:
                     total = stats.get("total_commits", 0)
                     score = stats.get("score", 0)
                     file_count = stats.get("file_count", 0)
-                    row_data = [str(i), author, str(recent), str(total), str(score), str(file_count)]
+                    row_data = [
+                        str(i),
+                        author,
+                        str(recent),
+                        str(total),
+                        str(score),
+                        str(file_count),
+                    ]
                 else:
                     row_data = [str(i), author, "N/A", str(stats), str(stats), "N/A"]
 
                 contrib_data.append(row_data)
 
-            DisplayHelper.print_table("contributor_ranking", contrib_data[: len(contrib_data)])
+            DisplayHelper.print_table(
+                "contributor_ranking", contrib_data[: len(contrib_data)]
+            )
 
             if len(sorted_contributors) > 10:
                 print(f"   ... 还有 {len(sorted_contributors) - 10} 位贡献者")
@@ -357,3 +381,252 @@ class DisplayHelper:
     def print_info(message):
         """打印信息"""
         print(f"ℹ️ {message}")
+
+    @staticmethod
+    def format_file_completion_stats(stats):
+        """格式化文件级完成统计"""
+        if not stats:
+            return "📈 文件进度统计: 数据不可用"
+
+        total_files = stats.get("total_files", 0)
+        assigned_files = stats.get("assigned_files", 0)
+        completed_files = stats.get("completed_files", 0)
+        pending_files = stats.get("pending_files", 0)
+        in_progress_files = stats.get("in_progress_files", 0)
+
+        completion_rate = stats.get("completion_rate", 0)
+        assignment_rate = stats.get("assignment_rate", 0)
+
+        completion_info = f"📈 文件进度统计: {total_files} 个文件 | "
+        completion_info += f"已分配: {assigned_files} ({assignment_rate:.1f}%) | "
+        completion_info += f"已完成: {completed_files} ({completion_rate:.1f}%) | "
+        completion_info += f"待处理: {pending_files} | 进行中: {in_progress_files}"
+
+        return completion_info
+
+    @staticmethod
+    def format_file_workload_distribution(workload):
+        """格式化文件级负载分布"""
+        if not workload:
+            return ""
+
+        distribution = "\n👥 文件级负载分布:\n"
+        sorted_workload = sorted(
+            workload.items(), key=lambda x: x[1]["assigned"], reverse=True
+        )
+
+        for person, load_info in sorted_workload:
+            assigned = load_info["assigned"]
+            completed = load_info["completed"]
+            pending = load_info["pending"]
+            completion_rate = (completed / assigned * 100) if assigned > 0 else 0
+
+            distribution += f" {person}: {assigned} 个文件 | "
+            distribution += (
+                f"完成: {completed} | 待处理: {pending} | 完成率: {completion_rate:.1f}%\n"
+            )
+
+        return distribution.rstrip()
+
+    @staticmethod
+    def display_file_detail(file_info):
+        """显示单个文件的详细信息"""
+        print("\n" + "=" * 100)
+        print(f"📄 文件详细信息: {file_info['path']}")
+        print("=" * 100)
+
+        # 基本信息
+        print(f"📊 基本信息:")
+        print(f"   文件路径: {file_info['path']}")
+        print(f"   目录: {file_info['directory']}")
+        print(f"   文件名: {file_info['filename']}")
+        print(f"   扩展名: {file_info['extension'] or '无'}")
+        print(f"   负责人: {file_info.get('assignee', '未分配')}")
+
+        # 状态信息
+        status = file_info.get("status", "pending")
+        status_icons = {
+            "pending": "⏳ 待处理",
+            "assigned": "📋 已分配",
+            "in_progress": "🔄 进行中",
+            "completed": "✅ 已完成",
+        }
+        status_text = status_icons.get(status, f"❓ {status}")
+        print(f"   状态: {status_text}")
+
+        # 优先级
+        priority = file_info.get("priority", "normal")
+        priority_icons = {"high": "🔥 高", "normal": "📊 普通", "low": "📉 低"}
+        priority_text = priority_icons.get(priority, f"❓ {priority}")
+        print(f"   优先级: {priority_text}")
+
+        # 时间信息
+        if file_info.get("assigned_at"):
+            print(f"   分配时间: {file_info['assigned_at']}")
+        if file_info.get("completed_at"):
+            print(f"   完成时间: {file_info['completed_at']}")
+
+        # 分配原因
+        assignment_reason = file_info.get("assignment_reason", "")
+        if assignment_reason:
+            print(f"   分配原因: {assignment_reason}")
+
+        # 备注
+        notes = file_info.get("notes", "")
+        if notes:
+            print(f"   备注: {notes}")
+
+        # 贡献者分析
+        contributors = file_info.get("contributors", {})
+        if contributors:
+            print(f"\n👥 文件贡献者分析:")
+
+            sorted_contributors = sorted(
+                contributors.items(),
+                key=lambda x: x[1]["score"] if isinstance(x[1], dict) else x[1],
+                reverse=True,
+            )
+
+            for i, (author, stats) in enumerate(sorted_contributors[:5], 1):
+                if isinstance(stats, dict):
+                    recent = stats.get("recent_commits", 0)
+                    total = stats.get("total_commits", 0)
+                    score = stats.get("score", 0)
+                    print(f"   {i}. {author}: 得分 {score} (近期: {recent}, 历史: {total})")
+                else:
+                    print(f"   {i}. {author}: 历史提交 {stats}")
+
+        print("=" * 100)
+
+    @staticmethod
+    def print_file_status_table(files, max_files=50):
+        """打印文件状态表格"""
+        if not files:
+            print("📋 没有找到文件")
+            return
+
+        # 限制显示数量
+        display_files = files[:max_files]
+
+        table_data = []
+        for i, file_info in enumerate(display_files, 1):
+            # 状态图标
+            status_icons = {
+                "pending": "⏳",
+                "assigned": "📋",
+                "in_progress": "🔄",
+                "completed": "✅",
+            }
+            status_icon = status_icons.get(file_info["status"], "❓")
+
+            # 优先级图标
+            priority_icons = {"high": "🔥", "normal": "📊", "low": "📉"}
+            priority_icon = priority_icons.get(file_info.get("priority", "normal"), "📊")
+
+            # 截断文件路径和分配原因以适应表格宽度
+            file_path = file_info["path"]
+            if len(file_path) > 45:
+                file_path = file_path[:42] + "..."
+
+            assignment_reason = file_info.get("assignment_reason", "")
+            if len(assignment_reason) > 30:
+                assignment_reason = assignment_reason[:27] + "..."
+
+            table_data.append(
+                [
+                    str(i),
+                    file_path,
+                    file_info["directory"][:20]
+                    if len(file_info["directory"]) > 20
+                    else file_info["directory"],
+                    file_info.get("assignee", "未分配")[:15],
+                    status_icon,
+                    priority_icon,
+                    assignment_reason,
+                ]
+            )
+
+        # 使用自定义表格配置
+        DisplayHelper.print_table("file_status_overview", table_data)
+
+        if len(files) > max_files:
+            print(f"\n💡 显示了前 {max_files} 个文件，总共 {len(files)} 个文件")
+
+    @staticmethod
+    def print_directory_summary_table(directory_summary):
+        """打印目录汇总表格"""
+        if not directory_summary:
+            print("📁 没有目录数据")
+            return
+
+        table_data = []
+        sorted_dirs = sorted(
+            directory_summary.items(), key=lambda x: x[1]["total_files"], reverse=True
+        )
+
+        for directory, stats in sorted_dirs:
+            total = stats["total_files"]
+            assigned = stats["assigned_files"]
+            completed = stats["completed_files"]
+            assignees = stats["assignees"]
+
+            completion_rate = (completed / total * 100) if total > 0 else 0
+
+            # 截断长目录名
+            dir_display = directory
+            if len(directory) > 35:
+                dir_display = directory[:32] + "..."
+
+            table_data.append(
+                [
+                    dir_display,
+                    str(total),
+                    str(assigned),
+                    str(completed),
+                    f"{completion_rate:.1f}%",
+                    str(len(assignees)),
+                ]
+            )
+
+        DisplayHelper.print_table("directory_summary", table_data)
+
+    @staticmethod
+    def print_workload_table(workload):
+        """打印工作负载分布表格"""
+        if not workload:
+            print("👥 没有工作负载数据")
+            return
+
+        table_data = []
+        sorted_workload = sorted(
+            workload.items(), key=lambda x: x[1]["assigned"], reverse=True
+        )
+
+        for assignee, load_info in sorted_workload:
+            assigned = load_info["assigned"]
+            completed = load_info["completed"]
+            pending = load_info["pending"]
+            completion_rate = (completed / assigned * 100) if assigned > 0 else 0
+
+            # 获取最新分配的文件时间
+            latest_assignment = ""
+            if load_info["files"]:
+                latest_file = max(
+                    load_info["files"],
+                    key=lambda x: x.get("assigned_at", ""),
+                    default={},
+                )
+                latest_assignment = latest_file.get("assigned_at", "")[:16]  # 只显示日期时间部分
+
+            table_data.append(
+                [
+                    assignee[:20],  # 限制姓名长度
+                    str(assigned),
+                    str(completed),
+                    str(pending),
+                    f"{completion_rate:.1f}%",
+                    latest_assignment,
+                ]
+            )
+
+        DisplayHelper.print_table("workload_distribution", table_data)
