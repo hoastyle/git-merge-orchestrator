@@ -54,7 +54,18 @@ class UltraFastAnalyzer:
             print(f"⏱️  [PERF] 结果提取: {extract_time:.3f}s")
             
             total_time = time.time() - main_start
+            total_time = time.time() - main_start
             print(f"✅ [PERF] 缓存模式总耗时: {total_time:.3f}s")
+            
+            # 即使是缓存模式也保存性能日志
+            self._save_performance_log(file_list, total_time, {
+                'incremental_check': step1_time,
+                'cache_check': step2_time,
+                'cache_load': cache_load_time,
+                'result_extract': extract_time,
+                'mode': 'cached'
+            })
+            
             return results
         
         # 3. 全局分析 - 一次Git调用获取所有信息
@@ -492,6 +503,43 @@ class UltraFastAnalyzer:
         self.cache_file.parent.mkdir(exist_ok=True)
         with open(self.cache_file, 'w') as f:
             json.dump(data, f, indent=2)
+    
+    def _save_performance_log(self, file_list, total_time, step_times):
+        """保存性能日志到文件"""
+        try:
+            log_file = self.repo_path / ".merge_work" / "performance_log.json"
+            log_file.parent.mkdir(exist_ok=True)
+            
+            log_entry = {
+                'timestamp': datetime.now().isoformat(),
+                'file_count': len(file_list),
+                'total_time': total_time,
+                'avg_time_per_file': total_time / len(file_list) * 1000,  # ms
+                'step_times': step_times,
+                'mode': 'ultra_fast'
+            }
+            
+            # 如果文件存在，加载现有日志
+            logs = []
+            if log_file.exists():
+                try:
+                    with open(log_file, 'r', encoding='utf-8') as f:
+                        logs = json.load(f)
+                except:
+                    logs = []
+            
+            # 添加新日志（保留最近50条）
+            logs.append(log_entry)
+            logs = logs[-50:]
+            
+            # 保存日志
+            with open(log_file, 'w', encoding='utf-8') as f:
+                json.dump(logs, f, indent=2, ensure_ascii=False)
+            
+            print(f"📝 [PERF] 性能日志已保存: {log_file}")
+            
+        except Exception as e:
+            print(f"⚠️ [PERF] 保存性能日志失败: {e}")
 
 
 # 性能测试函数
@@ -529,44 +577,6 @@ def performance_comparison_test():
         speedup = traditional_time / ultra_time
         print(f"\n⚡ 性能提升: {speedup:.1f}倍")
         print(f"💡 效率对比: {traditional_time/len(test_files)*1000:.1f}ms vs {ultra_time/len(test_files)*1000:.1f}ms 每文件")
-
-
-    def _save_performance_log(self, file_list, total_time, step_times):
-        """保存性能日志到文件"""
-        try:
-            log_file = self.repo_path / ".merge_work" / "performance_log.json"
-            log_file.parent.mkdir(exist_ok=True)
-            
-            log_entry = {
-                'timestamp': datetime.now().isoformat(),
-                'file_count': len(file_list),
-                'total_time': total_time,
-                'avg_time_per_file': total_time / len(file_list) * 1000,  # ms
-                'step_times': step_times,
-                'mode': 'ultra_fast'
-            }
-            
-            # 如果文件存在，加载现有日志
-            logs = []
-            if log_file.exists():
-                try:
-                    with open(log_file, 'r', encoding='utf-8') as f:
-                        logs = json.load(f)
-                except:
-                    logs = []
-            
-            # 添加新日志（保留最近50条）
-            logs.append(log_entry)
-            logs = logs[-50:]
-            
-            # 保存日志
-            with open(log_file, 'w', encoding='utf-8') as f:
-                json.dump(logs, f, indent=2, ensure_ascii=False)
-            
-            print(f"📝 [PERF] 性能日志已保存: {log_file}")
-            
-        except Exception as e:
-            print(f"⚠️ [PERF] 保存性能日志失败: {e}")
 
 
 if __name__ == "__main__":

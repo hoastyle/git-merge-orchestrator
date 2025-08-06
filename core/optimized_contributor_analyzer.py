@@ -140,6 +140,13 @@ class OptimizedContributorAnalyzer:
         print(f"✅ [PERF] 超高速分析总完成时间: {total_time:.3f}s")
         print(f"📊 [PERF] 处理统计: 总计{len(file_list)}个文件, 平均{total_time/len(file_list)*1000:.1f}ms/文件")
         
+        # 保存性能日志
+        self._save_performance_log(file_list, total_time, {
+            'ultra_analysis': ultra_time,
+            'format_conversion': convert_time,
+            'mode': 'optimized_ultra_fast'
+        })
+        
         self._batch_computed = True
         return self._batch_file_data
     
@@ -287,6 +294,17 @@ class OptimizedContributorAnalyzer:
 
         # 保存缓存
         self.save_persistent_cache()
+        
+        # 保存性能日志
+        total_time = (datetime.now() - main_start).total_seconds()
+        self._save_performance_log(file_list, total_time, {
+            'cache_check': cache_check_time if 'cache_check_time' in locals() else 0,
+            'file_classification': classification_time if 'classification_time' in locals() else 0,
+            'batch_analysis': batch_analysis_time if 'batch_analysis_time' in locals() else 0,
+            'deep_analysis': deep_analysis_time if 'deep_analysis_time' in locals() else 0,
+            'mode': 'optimized_traditional'
+        })
+        
         self._batch_computed = True
         return self._batch_file_data
 
@@ -1310,3 +1328,46 @@ class OptimizedContributorAnalyzer:
                 report.append(f"   • {suggestion}")
 
         return "\n".join(report)
+    
+    def _save_performance_log(self, file_list, total_time, step_times):
+        """保存性能日志到文件"""
+        try:
+            # 设置日志文件路径
+            if hasattr(self.git_ops, 'repo_path'):
+                repo_path = Path(self.git_ops.repo_path)
+            else:
+                repo_path = Path(".")
+                
+            log_file = repo_path / ".merge_work" / "performance_log.json"
+            log_file.parent.mkdir(exist_ok=True)
+            
+            log_entry = {
+                'timestamp': datetime.now().isoformat(),
+                'file_count': len(file_list),
+                'total_time': total_time,
+                'avg_time_per_file': total_time / len(file_list) * 1000,  # ms
+                'step_times': step_times,
+                'mode': step_times.get('mode', 'optimized_traditional')
+            }
+            
+            # 如果文件存在，加载现有日志
+            logs = []
+            if log_file.exists():
+                try:
+                    with open(log_file, 'r', encoding='utf-8') as f:
+                        logs = json.load(f)
+                except:
+                    logs = []
+            
+            # 添加新日志（保留最近50条）
+            logs.append(log_entry)
+            logs = logs[-50:]
+            
+            # 保存日志
+            with open(log_file, 'w', encoding='utf-8') as f:
+                json.dump(logs, f, indent=2, ensure_ascii=False)
+            
+            print(f"📝 [PERF] 性能日志已保存: {log_file}")
+            
+        except Exception as e:
+            print(f"⚠️ [PERF] 保存性能日志失败: {e}")
