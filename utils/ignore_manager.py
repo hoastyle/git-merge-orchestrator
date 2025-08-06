@@ -219,57 +219,190 @@ class IgnoreManager:
         except:
             normalized_path = str(Path(file_path)).replace("\\", "/")
 
-        # 按类型进行匹配
+        # 检查路径是否为目录
+        is_directory = self._is_directory_path(file_path, normalized_path)
+
+        # 按类型进行匹配，传递目录信息用于更精确的匹配
         return (
             self._match_exact(normalized_path)
-            or self._match_glob(normalized_path)
+            or self._match_glob_with_type(normalized_path, is_directory)
             or self._match_regex(normalized_path)
             or self._match_prefix(normalized_path)
             or self._match_suffix(normalized_path)
         )
+
+    def _is_directory_path(self, original_path: str, normalized_path: str) -> bool:
+        """
+        判断路径是否为目录
+        
+        Args:
+            original_path: 原始路径
+            normalized_path: 规范化后的相对路径
+            
+        Returns:
+            bool: True表示是目录
+        """
+        # 方法1: 路径以/结尾，明确表示目录
+        if normalized_path.endswith("/") or original_path.endswith("/"):
+            return True
+
+        # 方法2: 检查实际文件系统（如果文件存在）
+        try:
+            full_path = self.repo_path / normalized_path
+            if full_path.exists():
+                return full_path.is_dir()
+        except:
+            pass
+
+        # 方法3: 启发式判断 - 更保守的方法
+        # 只有在明确指示为目录时才返回True，否则假设为文件
+        # 这避免了将无扩展名文件误判为目录
+
+        return False
+
+    def _match_glob_with_type(self, path: str, is_directory: bool) -> bool:
+        """带类型信息的glob匹配"""
+        for pattern in self.compiled_patterns["glob"]:
+            if self._match_single_pattern_with_type(path, pattern, is_directory):
+                return True
+        return False
+
+    def _match_single_pattern_with_type(
+        self, path: str, pattern: str, is_directory: bool
+    ) -> bool:
+        """考虑文件类型的单个模式匹配"""
+        # 目录模式处理
+        if pattern.endswith("/"):
+            # 目录模式：只能匹配目录或目录内的文件，不能匹配同名文件
+            return self._match_directory_pattern(path, pattern)
+        else:
+            # 文件模式：可以匹配文件或目录（取决于具体实现）
+            # 但是对于通配符模式，优先使用fnmatch
+            if "**" in pattern or "*" in pattern or "?" in pattern:
+                if fnmatch.fnmatch(path, pattern):
+                    return True
+
+            # 精确文件匹配
+            return self._match_file_pattern(path, pattern)
+
+    def _path_in_directory(self, path: str, dir_pattern: str) -> bool:
+        """检查路径是否在指定目录下"""
+        dir_name = dir_pattern.rstrip("/")
+        return path.startswith(dir_name + "/") or "/" + dir_name + "/" in path
 
     def _match_exact(self, path: str) -> bool:
         """精确匹配"""
         return path in self.compiled_patterns["exact"]
 
     def _match_glob(self, path: str) -> bool:
-        """Glob模式匹配"""
-        for pattern in self.compiled_patterns["glob"]:
-            # 直接匹配文件路径
-            if fnmatch.fnmatch(path, pattern):
-                return True
+        """
+        Glob模式匹配 - 支持精确匹配和通配符匹配 (兼容性方法)
+        
+        匹配规则:
+        - `settings/` -> 只匹配根目录下的 settings/ 目录
+        - `**/settings/` -> 匹配任意嵌套位置的 settings/ 目录
+        - `*.py` -> 匹配任意位置的 .py 文件
+        """
+        # 使用改进的类型感知匹配
+        is_directory = self._is_directory_path(path, path)
+        return self._match_glob_with_type(path, is_directory)
 
-            # 对于目录模式（以/结尾），检查路径是否在该目录下
-            if pattern.endswith("/"):
-                pattern_without_slash = pattern.rstrip("/")
+    def _match_single_pattern(self, path: str, pattern: str) -> bool:
+        """匹配单个glob模式"""
+        # 直接glob匹配（处理通配符模式）
+        if fnmatch.fnmatch(path, pattern):
+            return True
 
-                # 检查路径是否直接以该目录开头（完全匹配目录）
-                if path.startswith(pattern_without_slash + "/"):
+        # 目录模式处理
+        if pattern.endswith("/"):
+            return self._match_directory_pattern(path, pattern)
+        else:
+            return self._match_file_pattern(path, pattern)
+
+    def _match_directory_pattern(self, path: str, pattern: str) -> bool:
+        """匹配目录模式"""
+        pattern_without_slash = pattern.rstrip("/")
+
+        # 检查是否为通配符模式 (**/directory/)
+        if pattern.startswith("**/"):
+            # 通配符模式：匹配任意嵌套位置
+            clean_pattern = pattern_without_slash[3:]  # 移除 **/
+            return self._match_nested_directory(path, clean_pattern)
+        else:
+            # 精确模式：只匹配根目录或指定位置
+            return self._match_exact_directory(path, pattern_without_slash)
+
+    def _match_exact_directory(self, path: str, pattern: str) -> bool:
+        """精确目录匹配 - 只匹配根目录或精确路径位置"""
+        # 情况1: 文件在目录下 (settings/ 匹配 settings/config.json)
+        if path.startswith(pattern + "/"):
+            return True
+
+        # 情况2: 路径以/结尾，明确表示是目录，或者路径本身就是目录名
+        if path.endswith("/") and (
+            path == pattern + "/" or path.rstrip("/") == pattern
+        ):
+            return True
+
+        # 情况2.5: 路径本身就是目录名（用于匹配目录本身）
+        # 只有在路径明确是目录时才匹配，避免误匹配同名文件
+        if path == pattern:
+            full_path = self.repo_path / path
+            try:
+                if full_path.exists():
+                    return full_path.is_dir()
+            except:
+                pass
+            # 对于不存在的路径，不进行匹配（保守策略）
+            return False
+
+        # 情况3: 支持部分路径匹配 (如 app/settings/ 模式)
+        if "/" in pattern:
+            # 如果模式包含路径分隔符，需要精确路径匹配
+            path_parts = path.split("/")
+            pattern_parts = pattern.split("/")
+
+            # 检查是否在任意起始位置匹配完整的模式路径
+            for i in range(len(path_parts) - len(pattern_parts) + 1):
+                if path_parts[i : i + len(pattern_parts)] == pattern_parts:
                     return True
 
-                # 检查路径的任何部分是否包含匹配的目录
-                path_parts = path.split("/")
-                for i in range(len(path_parts)):
-                    # 检查每个目录部分是否匹配
-                    dir_part = path_parts[i]
-                    if dir_part == pattern_without_slash:
-                        return True
-                    # 也支持通配符匹配
-                    if fnmatch.fnmatch(dir_part, pattern_without_slash):
-                        return True
+        # 注意：对于settings/模式，不匹配单独的settings文件
+        # 只有在路径明确是目录（包含子路径或以/结尾）时才匹配
+        return False
 
-                    # 检查从当前位置到文件的完整路径是否匹配
-                    if i < len(path_parts) - 1:  # 不包括最后的文件名
-                        partial_path = "/".join(path_parts[i : i + 1])
-                        if partial_path == pattern_without_slash:
-                            return True
-            else:
-                # 对于非目录模式，检查目录匹配（向后兼容）
-                dir_path = os.path.dirname(path)
-                if dir_path and fnmatch.fnmatch(dir_path + "/", pattern + "/"):
+    def _match_nested_directory(self, path: str, directory_name: str) -> bool:
+        """嵌套目录匹配 - 匹配任意位置的目录"""
+        path_parts = path.split("/")
+
+        # 检查路径中是否有任何部分匹配目录名
+        for i, part in enumerate(path_parts):
+            if part == directory_name:
+                # 确认这确实是一个目录（不是文件名的一部分）
+                # 如果是最后一个部分，检查是否还有后续路径
+                if i < len(path_parts) - 1:
+                    return True
+                # 如果是最后一个部分，但路径以/结尾，也算目录
+                if path.endswith("/"):
+                    return True
+
+            # 支持通配符匹配目录名
+            if fnmatch.fnmatch(part, directory_name):
+                if i < len(path_parts) - 1 or path.endswith("/"):
                     return True
 
         return False
+
+    def _match_file_pattern(self, path: str, pattern: str) -> bool:
+        """文件模式匹配"""
+        # 如果模式不包含路径分隔符，匹配任意位置的文件名
+        if "/" not in pattern:
+            filename = os.path.basename(path)
+            # 精确匹配文件名
+            return filename == pattern or fnmatch.fnmatch(filename, pattern)
+        else:
+            # 包含路径的精确匹配
+            return fnmatch.fnmatch(path, pattern)
 
     def _match_regex(self, path: str) -> bool:
         """正则表达式匹配"""
