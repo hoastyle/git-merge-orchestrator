@@ -16,6 +16,7 @@ from config import (
     DEFAULT_ACTIVE_MONTHS,
     ENABLE_PERFORMANCE_MONITORING,
 )
+from core.ultra_fast_analyzer import UltraFastAnalyzer
 from utils.performance_monitor import (
     performance_monitor,
     timing_context,
@@ -36,6 +37,9 @@ class OptimizedContributorAnalyzer:
 
         # 智能缓存管理器
         self.smart_cache = get_cache_manager(git_ops.repo_path)
+        
+        # 超高速分析器
+        self.ultra_fast_analyzer = UltraFastAnalyzer(git_ops.repo_path)
 
         # 内存缓存（保留向后兼容）
         self._file_contributors_cache = {}
@@ -90,15 +94,55 @@ class OptimizedContributorAnalyzer:
             print(f"⚠️ 保存缓存失败: {e}")
 
     @performance_monitor("批量分析")
-    def batch_analyze_all_files(self, file_list):
-        """批量分析所有文件的贡献者信息"""
+    def batch_analyze_all_files(self, file_list, use_ultra_fast=True):
+        """批量分析所有文件的贡献者信息
+        
+        Args:
+            file_list: 文件列表
+            use_ultra_fast: 是否使用超高速分析（默认True，>=10个文件时自动启用）
+        """
         if self._batch_computed:
             return self._batch_file_data
 
-        print(f"🚀 开始批量分析 {len(file_list)} 个文件的贡献者信息...")
+        # 智能选择分析模式
+        should_use_ultra = use_ultra_fast and len(file_list) >= 10
+        
+        if should_use_ultra:
+            return self._ultra_fast_batch_analysis(file_list)
+        else:
+            return self._traditional_batch_analysis(file_list)
+    
+    def _ultra_fast_batch_analysis(self, file_list):
+        """超高速批量分析"""
+        print(f"🚀 使用超高速分析模式处理 {len(file_list)} 个文件...")
+        start_time = datetime.now()
+        
+        # 使用超高速分析器
+        ultra_results = self.ultra_fast_analyzer.analyze_contributors_ultra_fast(
+            file_list, months=DEFAULT_ANALYSIS_MONTHS
+        )
+        
+        # 转换为兼容格式并缓存
+        for file_path, contributors in ultra_results.items():
+            self._batch_file_data[file_path] = contributors
+            # 同时更新文件缓存
+            cache_key = self._get_file_cache_key(file_path)
+            self._file_contributors_cache[cache_key] = contributors
+        
+        elapsed = (datetime.now() - start_time).total_seconds()
+        print(f"⚡ 超高速分析完成，用时 {elapsed:.2f} 秒")
+        print(f"📊 处理统计: 总计{len(file_list)}个文件, 平均{elapsed/len(file_list)*1000:.1f}ms/文件")
+        
+        self._batch_computed = True
+        return self._batch_file_data
+    
+    def _traditional_batch_analysis(self, file_list):
+        """传统批量分析（保留原有逻辑）"""
+        print(f"📊 使用传统优化模式处理 {len(file_list)} 个文件...")
         print(f"⚡ 性能优化提示：正在应用智能文件分类策略...")
         start_time = datetime.now()
 
+        # 继续使用原有的传统分析逻辑
         # 检查缓存
         cached_files = set()
         uncached_files = []
