@@ -22,31 +22,72 @@ class UltraFastAnalyzer:
         
     def analyze_contributors_ultra_fast(self, file_list, months=6, force_incremental=False):
         """超高速分析 - 全局分析 + 智能推断 + 增量更新"""
-        print(f"🚀 开始超高速分析 {len(file_list)} 个文件...")
-        start_time = time.time()
+        main_start = time.time()
+        print(f"🚀 [PERF] 开始超高速分析 {len(file_list)} 个文件... (开始时间: {main_start:.3f})")
         
         # 1. 检查是否可以使用增量更新
-        if not force_incremental and self._should_use_incremental_update(file_list):
+        step1_start = time.time()
+        should_use_incremental = not force_incremental and self._should_use_incremental_update(file_list)
+        step1_time = time.time() - step1_start
+        print(f"⏱️  [PERF] 步骤1-增量更新检查: {step1_time:.3f}s")
+        
+        if should_use_incremental:
+            print("🔄 [PERF] 使用增量更新模式")
             return self._incremental_update_analysis(file_list, months)
         
         # 2. 检查缓存
-        if self._is_cache_valid():
-            print("⚡ 使用缓存数据，瞬间完成")
+        step2_start = time.time()
+        cache_valid = self._is_cache_valid()
+        step2_time = time.time() - step2_start
+        print(f"⏱️  [PERF] 步骤2-缓存检查: {step2_time:.3f}s (有效: {cache_valid})")
+        
+        if cache_valid:
+            cache_load_start = time.time()
+            print("⚡ [PERF] 使用缓存数据")
             cached_data = self._load_cache()
-            return self._extract_file_results(cached_data, file_list)
+            cache_load_time = time.time() - cache_load_start
+            print(f"⏱️  [PERF] 缓存加载: {cache_load_time:.3f}s")
+            
+            extract_start = time.time()
+            results = self._extract_file_results(cached_data, file_list)
+            extract_time = time.time() - extract_start
+            print(f"⏱️  [PERF] 结果提取: {extract_time:.3f}s")
+            
+            total_time = time.time() - main_start
+            print(f"✅ [PERF] 缓存模式总耗时: {total_time:.3f}s")
+            return results
         
         # 3. 全局分析 - 一次Git调用获取所有信息
+        step3_start = time.time()
         since_date = (datetime.now() - timedelta(days=months * 30)).strftime("%Y-%m-%d")
+        print(f"📊 [PERF] 开始全局分析 (分析时间范围: {since_date} 至今)")
         global_data = self._global_analysis(since_date)
+        step3_time = time.time() - step3_start
+        print(f"⏱️  [PERF] 步骤3-全局分析: {step3_time:.3f}s")
         
         # 4. 智能分配
+        step4_start = time.time()
         results = self._intelligent_assignment(global_data, file_list)
+        step4_time = time.time() - step4_start
+        print(f"⏱️  [PERF] 步骤4-智能分配: {step4_time:.3f}s")
         
         # 5. 保存缓存
+        step5_start = time.time()
         self._save_cache(global_data)
+        step5_time = time.time() - step5_start
+        print(f"⏱️  [PERF] 步骤5-缓存保存: {step5_time:.3f}s")
         
-        elapsed = time.time() - start_time
-        print(f"⚡ 超高速分析完成: {elapsed:.3f}s (平均 {elapsed/len(file_list)*1000:.1f}ms/文件)")
+        total_time = time.time() - main_start
+        print(f"✅ [PERF] 超高速分析总耗时: {total_time:.3f}s (平均 {total_time/len(file_list)*1000:.1f}ms/文件)")
+        
+        # 保存性能日志
+        self._save_performance_log(file_list, total_time, {
+            'incremental_check': step1_time,
+            'cache_check': step2_time, 
+            'global_analysis': step3_time,
+            'intelligent_assignment': step4_time,
+            'cache_save': step5_time
+        })
         
         return results
     
@@ -183,18 +224,29 @@ class UltraFastAnalyzer:
     
     def _global_analysis(self, since_date):
         """一次性全局分析 - 核心优化"""
-        print("📊 执行全局分析...")
-        start = time.time()
+        analysis_start = time.time()
+        print(f"📊 [PERF] 执行全局分析... (开始时间: {analysis_start:.3f})")
         
-        # 单个Git命令获取所有需要的信息
+        # 构建Git命令
+        cmd_build_start = time.time()
         cmd = f'git log --since="{since_date}" --format="COMMIT:%H|%an|%ct" --name-only'
+        cmd_build_time = time.time() - cmd_build_start
+        print(f"⏱️  [PERF] Git命令构建: {cmd_build_time:.3f}s")
+        print(f"📝 [PERF] Git命令: {cmd}")
         
+        # 执行Git命令
+        git_start = time.time()
         result = subprocess.run(
             cmd, shell=True, cwd=self.repo_path, 
             capture_output=True, text=True, check=True
         )
+        git_time = time.time() - git_start
+        print(f"⏱️  [PERF] Git查询执行: {git_time:.3f}s")
         
-        print(f"   Git查询耗时: {time.time() - start:.3f}s")
+        # 统计输出大小
+        output_size = len(result.stdout)
+        output_lines = len(result.stdout.split('\n'))
+        print(f"📊 [PERF] Git输出: {output_size} 字符, {output_lines} 行")
         
         # 解析结果
         parse_start = time.time()
@@ -204,13 +256,19 @@ class UltraFastAnalyzer:
         
         lines = result.stdout.strip().split('\n')
         current_commit = None
+        processed_lines = 0
+        commit_count = 0
+        file_lines = 0
         
         for line in lines:
             line = line.strip()
             if not line:
                 continue
                 
+            processed_lines += 1
+            
             if line.startswith('COMMIT:'):
+                commit_count += 1
                 # 解析提交信息: COMMIT:hash|author|timestamp
                 parts = line[7:].split('|', 2)
                 if len(parts) >= 2:
@@ -223,17 +281,34 @@ class UltraFastAnalyzer:
                     }
                     author_activity[author] += 1
             elif current_commit and line and not line.startswith('COMMIT:'):
+                file_lines += 1
                 # 这是一个文件路径
                 author = current_commit['author']
                 file_contributors[line][author] += 1
         
-        print(f"   数据解析耗时: {time.time() - parse_start:.3f}s")
-        print(f"   发现 {len(file_contributors)} 个文件, {len(author_activity)} 个作者")
+        parse_time = time.time() - parse_start
+        total_analysis_time = time.time() - analysis_start
+        
+        print(f"⏱️  [PERF] 数据解析: {parse_time:.3f}s")
+        print(f"📊 [PERF] 解析统计: {processed_lines} 行处理, {commit_count} 个提交, {file_lines} 个文件行")
+        print(f"📊 [PERF] 发现 {len(file_contributors)} 个文件, {len(author_activity)} 个作者")
+        print(f"✅ [PERF] 全局分析总耗时: {total_analysis_time:.3f}s")
         
         return {
             'file_contributors': dict(file_contributors),
             'author_activity': dict(author_activity),
-            'timestamp': time.time()
+            'timestamp': time.time(),
+            '_perf_stats': {
+                'cmd_build_time': cmd_build_time,
+                'git_exec_time': git_time,
+                'parse_time': parse_time,
+                'total_time': total_analysis_time,
+                'output_size': output_size,
+                'output_lines': output_lines,
+                'processed_lines': processed_lines,
+                'commit_count': commit_count,
+                'file_lines': file_lines
+            }
         }
     
     def _intelligent_assignment(self, global_data, file_list):
@@ -454,6 +529,44 @@ def performance_comparison_test():
         speedup = traditional_time / ultra_time
         print(f"\n⚡ 性能提升: {speedup:.1f}倍")
         print(f"💡 效率对比: {traditional_time/len(test_files)*1000:.1f}ms vs {ultra_time/len(test_files)*1000:.1f}ms 每文件")
+
+
+    def _save_performance_log(self, file_list, total_time, step_times):
+        """保存性能日志到文件"""
+        try:
+            log_file = self.repo_path / ".merge_work" / "performance_log.json"
+            log_file.parent.mkdir(exist_ok=True)
+            
+            log_entry = {
+                'timestamp': datetime.now().isoformat(),
+                'file_count': len(file_list),
+                'total_time': total_time,
+                'avg_time_per_file': total_time / len(file_list) * 1000,  # ms
+                'step_times': step_times,
+                'mode': 'ultra_fast'
+            }
+            
+            # 如果文件存在，加载现有日志
+            logs = []
+            if log_file.exists():
+                try:
+                    with open(log_file, 'r', encoding='utf-8') as f:
+                        logs = json.load(f)
+                except:
+                    logs = []
+            
+            # 添加新日志（保留最近50条）
+            logs.append(log_entry)
+            logs = logs[-50:]
+            
+            # 保存日志
+            with open(log_file, 'w', encoding='utf-8') as f:
+                json.dump(logs, f, indent=2, ensure_ascii=False)
+            
+            print(f"📝 [PERF] 性能日志已保存: {log_file}")
+            
+        except Exception as e:
+            print(f"⚠️ [PERF] 保存性能日志失败: {e}")
 
 
 if __name__ == "__main__":

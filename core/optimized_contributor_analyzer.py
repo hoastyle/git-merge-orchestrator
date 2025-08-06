@@ -114,33 +114,43 @@ class OptimizedContributorAnalyzer:
     
     def _ultra_fast_batch_analysis(self, file_list):
         """超高速批量分析"""
-        print(f"🚀 使用超高速分析模式处理 {len(file_list)} 个文件...")
-        start_time = datetime.now()
+        main_start = datetime.now()
+        print(f"🚀 [PERF] 使用超高速分析模式处理 {len(file_list)} 个文件... (开始时间: {main_start.timestamp():.3f})")
         
         # 使用超高速分析器
+        ultra_start = datetime.now()
         ultra_results = self.ultra_fast_analyzer.analyze_contributors_ultra_fast(
             file_list, months=DEFAULT_ANALYSIS_MONTHS
         )
+        ultra_time = (datetime.now() - ultra_start).total_seconds()
+        print(f"⏱️  [PERF] 超高速分析器执行: {ultra_time:.3f}s")
         
         # 转换为兼容格式并缓存
+        convert_start = datetime.now()
         for file_path, contributors in ultra_results.items():
             self._batch_file_data[file_path] = contributors
             # 同时更新文件缓存
             cache_key = self._get_file_cache_key(file_path)
             self._file_contributors_cache[cache_key] = contributors
         
-        elapsed = (datetime.now() - start_time).total_seconds()
-        print(f"⚡ 超高速分析完成，用时 {elapsed:.2f} 秒")
-        print(f"📊 处理统计: 总计{len(file_list)}个文件, 平均{elapsed/len(file_list)*1000:.1f}ms/文件")
+        convert_time = (datetime.now() - convert_start).total_seconds()
+        print(f"⏱️  [PERF] 格式转换和缓存: {convert_time:.3f}s")
+        
+        total_time = (datetime.now() - main_start).total_seconds()
+        print(f"✅ [PERF] 超高速分析总完成时间: {total_time:.3f}s")
+        print(f"📊 [PERF] 处理统计: 总计{len(file_list)}个文件, 平均{total_time/len(file_list)*1000:.1f}ms/文件")
         
         self._batch_computed = True
         return self._batch_file_data
     
     def _traditional_batch_analysis(self, file_list):
         """传统批量分析（保留原有逻辑）"""
-        print(f"📊 使用传统优化模式处理 {len(file_list)} 个文件...")
-        print(f"⚡ 性能优化提示：正在应用智能文件分类策略...")
-        start_time = datetime.now()
+        main_start = datetime.now()
+        print(f"📊 [PERF] 使用传统优化模式处理 {len(file_list)} 个文件... (开始时间: {main_start.timestamp():.3f})")
+        print(f"⚡ [PERF] 性能优化提示：正在应用智能文件分类策略...")
+        
+        # 继续使用原有的传统分析逻辑，但添加详细计时
+        print("🔍 [PERF] 开始传统分析流程...")
 
         # 继续使用原有的传统分析逻辑
         # 检查缓存
