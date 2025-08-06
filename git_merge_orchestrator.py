@@ -833,11 +833,17 @@ class GitMergeOrchestrator:
 
     def mark_assignee_completed(self, assignee_name):
         """标记指定负责人的所有任务为已完成"""
-        return self.plan_manager.mark_assignee_completed(assignee_name)
+        if self.processing_mode == "file_level":
+            return self.file_plan_manager.mark_assignee_completed(assignee_name)
+        else:
+            return self.plan_manager.mark_assignee_completed(assignee_name)
 
     def auto_check_remote_status(self):
         """自动检查远程分支状态"""
-        return self.plan_manager.auto_check_remote_status()
+        if self.processing_mode == "file_level":
+            return self.file_plan_manager.auto_check_remote_status()
+        else:
+            return self.plan_manager.auto_check_remote_status()
 
     def finalize_merge(self):
         """完成最终合并 - 根据当前策略选择执行器"""
