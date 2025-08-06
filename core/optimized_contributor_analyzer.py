@@ -91,6 +91,7 @@ class OptimizedContributorAnalyzer:
             return self._batch_file_data
 
         print(f"🚀 开始批量分析 {len(file_list)} 个文件的贡献者信息...")
+        print(f"⚡ 性能优化提示：正在应用智能文件分类策略...")
         start_time = datetime.now()
 
         # 检查缓存
@@ -118,30 +119,69 @@ class OptimizedContributorAnalyzer:
         print(f"🔍 需要分析 {len(uncached_files)} 个新文件")
 
         # 分离可能需要follow的文件和普通文件
+        classification_start = datetime.now()
         critical_files, regular_files = self._classify_files_for_analysis(
             uncached_files
         )
+        classification_time = (datetime.now() - classification_start).total_seconds()
 
-        if critical_files:
-            print(f"🎯 发现 {len(critical_files)} 个关键文件，将使用深度分析（--follow）")
+        # 性能统计
+        total_analysis_files = len(uncached_files)
+        critical_ratio = (
+            (len(critical_files) / total_analysis_files * 100)
+            if total_analysis_files > 0
+            else 0
+        )
 
-        if regular_files:
-            print(f"📊 {len(regular_files)} 个普通文件将使用批量分析")
+        print(f"📊 文件分类完成 ({classification_time:.3f}s):")
+        print(
+            f"   🎯 关键文件: {len(critical_files)} 个 ({critical_ratio:.1f}%) - 使用深度分析（--follow）"
+        )
+        print(f"   📋 普通文件: {len(regular_files)} 个 ({100-critical_ratio:.1f}%) - 使用批量分析")
+
+        if critical_ratio > 20:  # 如果超过20%的文件使用深度分析，给出性能警告
+            print(f"⚠️  性能警告：{critical_ratio:.1f}%的文件将使用深度分析，可能影响性能")
+        else:
+            print(f"✅ 性能优化：仅{critical_ratio:.1f}%的文件使用深度分析，性能良好")
 
         # 对关键文件使用深度分析
-        for file_path in critical_files:
-            contributors = self._analyze_single_file_with_follow(file_path)
-            cache_key = self._get_file_cache_key(file_path)
-            self._file_contributors_cache[cache_key] = contributors
-            self._batch_file_data[file_path] = contributors
+        if critical_files:
+            deep_analysis_start = datetime.now()
+            for file_path in critical_files:
+                contributors = self._analyze_single_file_with_follow(file_path)
+                cache_key = self._get_file_cache_key(file_path)
+                self._file_contributors_cache[cache_key] = contributors
+                self._batch_file_data[file_path] = contributors
+            deep_analysis_time = (datetime.now() - deep_analysis_start).total_seconds()
+            avg_time_per_deep_file = deep_analysis_time / len(critical_files)
+            print(
+                f"🎯 深度分析完成: {len(critical_files)} 个文件, 耗时 {deep_analysis_time:.2f}s (平均 {avg_time_per_deep_file:.3f}s/文件)"
+            )
 
         # 对普通文件使用批量分析
         if regular_files:
+            batch_analysis_start = datetime.now()
             batch_results = self._fixed_batch_analyze_files(regular_files)
             for file_path, contributors in batch_results.items():
                 cache_key = self._get_file_cache_key(file_path)
                 self._file_contributors_cache[cache_key] = contributors
                 self._batch_file_data[file_path] = contributors
+            batch_analysis_time = (
+                datetime.now() - batch_analysis_start
+            ).total_seconds()
+            avg_time_per_batch_file = (
+                batch_analysis_time / len(regular_files) if regular_files else 0
+            )
+            print(
+                f"📊 批量分析完成: {len(regular_files)} 个文件, 耗时 {batch_analysis_time:.2f}s (平均 {avg_time_per_batch_file:.3f}s/文件)"
+            )
+
+            # 性能对比
+            if critical_files and regular_files:
+                speedup_ratio = avg_time_per_deep_file / max(
+                    avg_time_per_batch_file, 0.001
+                )
+                print(f"⚡ 性能对比：批量分析比深度分析快 {speedup_ratio:.1f}x")
 
         elapsed = (datetime.now() - start_time).total_seconds()
         print(f"⚡ 批量分析完成，用时 {elapsed:.2f} 秒")
@@ -155,21 +195,135 @@ class OptimizedContributorAnalyzer:
         return self._batch_file_data
 
     def _classify_files_for_analysis(self, file_list):
-        """分类文件：哪些需要深度分析（--follow），哪些可以批量分析"""
+        """分类文件：哪些需要深度分析（--follow），哪些可以批量分析
+        
+        优化策略：大幅减少深度分析文件数量，只对真正可能重命名的核心文件使用--follow
+        """
         critical_files = []
         regular_files = []
 
-        # 检测可能被重命名的文件（启发式方法）
+        # 更严格的关键文件判断条件，避免过度使用深度分析
         for file_path in file_list:
-            # 关键文件类型或重要路径使用深度分析
-            if file_path.endswith(
-                (".py", ".js", ".ts", ".java", ".cpp", ".c", ".h")
-            ) and ("core" in file_path or "main" in file_path or "index" in file_path):
+            is_critical = False
+
+            # 1. 只有极少数核心文件才需要深度分析
+            core_patterns = [
+                "main.py",
+                "index.js",
+                "index.ts",
+                "app.py",
+                "server.py",
+                "__init__.py",
+                "setup.py",
+                "manage.py",
+                "wsgi.py",
+                "asgi.py",
+            ]
+
+            file_name = file_path.split("/")[-1]
+            if file_name in core_patterns:
+                is_critical = True
+
+            # 2. 根目录的重要配置文件
+            elif "/" not in file_path and file_path.endswith(
+                (".py", ".js", ".ts", ".json", ".yml", ".yaml")
+            ):
+                is_critical = True
+
+            # 3. 明确的框架入口文件
+            elif any(
+                pattern in file_path.lower()
+                for pattern in ["main/", "/main.", "entry", "bootstrap"]
+            ):
+                is_critical = True
+
+            # 4. 检查是否可能有重命名历史（基于文件大小和路径深度）
+            elif self._should_check_rename_history(file_path):
+                is_critical = True
+
+            if is_critical:
                 critical_files.append(file_path)
             else:
                 regular_files.append(file_path)
 
+        # 安全限制：即使满足条件，也限制深度分析文件的比例
+        total_files = len(file_list)
+        max_critical_files = max(
+            1, min(10, total_files // 10)
+        )  # 最多10%的文件使用深度分析，至少1个，最多10个
+
+        if len(critical_files) > max_critical_files:
+            # 按重要性排序，只保留最重要的文件
+            sorted_critical = self._sort_files_by_importance(critical_files)
+            demoted_files = sorted_critical[max_critical_files:]
+            critical_files = sorted_critical[:max_critical_files]
+            regular_files.extend(demoted_files)
+
+            print(
+                f"⚡ 性能优化：限制深度分析文件数量从 {len(sorted_critical)} 降至 {len(critical_files)} 个"
+            )
+
         return critical_files, regular_files
+
+    def _should_check_rename_history(self, file_path):
+        """判断文件是否可能有重命名历史，需要使用--follow"""
+        try:
+            # 快速检查：如果文件路径包含常见的重构标识，可能需要跟踪重命名
+            refactor_indicators = [
+                "legacy",
+                "old",
+                "deprecated",
+                "migration",
+                "refactor",
+                "v1",
+                "v2",
+                "backup",
+                "temp",
+                "new",
+            ]
+
+            path_lower = file_path.lower()
+            if any(indicator in path_lower for indicator in refactor_indicators):
+                return True
+
+            # 检查文件是否在深层目录（可能被移动过）
+            depth = file_path.count("/")
+            if depth >= 4:  # 深度>=4的文件更可能有移动历史
+                return True
+
+            return False
+        except:
+            return False
+
+    def _sort_files_by_importance(self, file_list):
+        """按重要性对文件排序，用于限制深度分析数量时的优先级"""
+
+        def importance_score(file_path):
+            score = 0
+            file_name = file_path.split("/")[-1]
+
+            # 核心文件得分最高
+            if file_name in ["main.py", "index.js", "index.ts", "app.py"]:
+                score += 100
+
+            # 根目录文件得分较高
+            if "/" not in file_path:
+                score += 50
+
+            # 特定关键词加分
+            if any(
+                keyword in file_path.lower()
+                for keyword in ["main", "core", "entry", "bootstrap"]
+            ):
+                score += 30
+
+            # 配置文件加分
+            if file_path.endswith((".json", ".yml", ".yaml", ".cfg", ".ini")):
+                score += 20
+
+            return score
+
+        return sorted(file_list, key=importance_score, reverse=True)
 
     def _analyze_single_file_with_follow(self, filepath):
         """单文件深度分析（支持重命名跟踪）- 使用智能缓存"""
@@ -347,18 +501,13 @@ class OptimizedContributorAnalyzer:
         return dict(contributors_by_file)
 
     def _get_file_cache_key(self, file_path):
-        """生成文件缓存键"""
-        try:
-            # 获取文件的最后提交hash作为缓存键的一部分
-            cmd = f'git log -1 --format="%H" -- "{file_path}"'
-            last_commit = self.git_ops.run_command(cmd)
-            if last_commit:
-                return f"{file_path}:{last_commit}"
-        except:
-            pass
+        """生成文件缓存键 - 性能优化版本，避免额外Git调用"""
+        # 简化缓存键生成，避免每个文件都执行Git命令
+        # 使用文件路径 + 当前日期作为缓存键，依靠时间过期机制保证数据新鲜度
+        from datetime import datetime
 
-        # 回退方案：使用文件路径
-        return file_path
+        date_key = datetime.now().strftime("%Y-%m-%d")
+        return f"{file_path}@{date_key}"
 
     @performance_monitor("并行分析组")
     def parallel_analyze_groups(self, groups):
