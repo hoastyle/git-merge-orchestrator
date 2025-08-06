@@ -6,6 +6,7 @@ Git Merge Orchestrator - 文件级任务分配器
 from datetime import datetime, timedelta
 from collections import defaultdict
 import json
+from pathlib import Path
 from utils.progress_indicator import ProgressTracker, ProgressIndicator
 
 
@@ -20,6 +21,10 @@ class FileTaskAssigner:
         self, exclude_authors=None, max_tasks_per_person=200, include_fallback=True
     ):
         """智能自动分配文件给贡献者"""
+        # 性能监控开始
+        main_start = datetime.now()
+        print(f"🚀 [PERF] 开始文件任务分配... (开始时间: {main_start.timestamp():.3f})")
+        
         file_plan = self.file_manager.load_file_plan()
         if not file_plan:
             print("❌ 文件级计划不存在，请先创建合并计划")
@@ -31,15 +36,39 @@ class FileTaskAssigner:
         tracker = ProgressTracker(len(steps), "文件任务分配")
 
         # 步骤 1: 获取活跃贡献者
+        step1_start = datetime.now()
         tracker.step("获取活跃贡献者")
         exclude_authors = exclude_authors or []
         active_contributors = self.contributor_analyzer.get_active_contributors(3)
 
+        step1_time = (datetime.now() - step1_start).total_seconds()
+        print(f"⏱️  [PERF] 步骤1-获取活跃贡献者: {step1_time:.3f}s")
         print(f"   🎯 活跃贡献者: {len(active_contributors)} 位")
         print(f"   🚫 手动排除: {len(exclude_authors)} 位")
 
-        # 步骤 2: 分析文件贡献度
+        # 步骤 2: 分析文件贡献度（使用批量分析优化）
         tracker.step(f"分析文件贡献度")
+        
+        unassigned_files = [f for f in file_plan["files"] if not f.get("assignee")]
+        
+        # 🚀 使用批量分析替代逐个文件分析
+        print(f"🚀 [PERF] 使用批量分析优化 {len(unassigned_files)} 个文件...")
+        batch_start = datetime.now()
+        
+        # 提取文件路径列表
+        file_paths = [f["path"] for f in unassigned_files]
+        
+        # 批量分析所有文件
+        batch_contributors = self.contributor_analyzer.batch_analyze_all_files(file_paths)
+        
+        batch_time = (datetime.now() - batch_start).total_seconds()
+        print(f"✅ [PERF] 批量分析完成: {batch_time:.3f}s ({batch_time/len(file_paths)*1000:.1f}ms/文件)")
+        
+        # 将批量分析结果分配给文件信息
+        for file_info in unassigned_files:
+            file_path = file_info["path"]
+            file_contributors = batch_contributors.get(file_path, {})
+            file_info["contributors"] = file_contributors
 
         # 统计变量
         assignment_stats = {
@@ -52,23 +81,21 @@ class FileTaskAssigner:
         workload_counter = defaultdict(int)
         assignments = []
 
-        # 使用进度指示器处理文件分析
-        progress_indicator = ProgressIndicator(f"分析 {total_files} 个文件的贡献度")
+        # 步骤 3: 智能分配文件
+        step3_start = datetime.now()
+        tracker.step(f"智能分配 {len(unassigned_files)} 个文件")
+
+        # 使用进度指示器处理文件分配（不再需要分析）
+        progress_indicator = ProgressIndicator(f"分配 {len(unassigned_files)} 个文件")
         progress_indicator.start()
 
         try:
-            unassigned_files = [f for f in file_plan["files"] if not f.get("assignee")]
-
-            # 步骤 3: 智能分配文件
-            tracker.step(f"智能分配 {len(unassigned_files)} 个文件")
-
             for i, file_info in enumerate(unassigned_files):
                 file_path = file_info["path"]
                 directory = file_info["directory"]
 
-                # 分析文件贡献者
-                file_contributors = self._analyze_file_contributors(file_path)
-                file_info["contributors"] = file_contributors
+                # 文件贡献者已经通过批量分析获得
+                file_contributors = file_info["contributors"]
 
                 # 尝试直接分配
                 assignee, reason = self._assign_file_to_best_contributor(
@@ -113,9 +140,16 @@ class FileTaskAssigner:
             progress_indicator.stop(error_message=f"文件分析失败: {str(e)}")
             raise
 
+        step3_time = (datetime.now() - step3_start).total_seconds()
+        print(f"⏱️  [PERF] 步骤3-智能分配: {step3_time:.3f}s")
+
         # 步骤 4: 批量分配文件
+        step4_start = datetime.now()
         tracker.step("保存分配结果")
         assigned_count = self.file_manager.batch_assign_files(assignments)
+        
+        step4_time = (datetime.now() - step4_start).total_seconds()
+        print(f"⏱️  [PERF] 步骤4-保存分配结果: {step4_time:.3f}s")
 
         tracker.finish(f"文件任务分配完成，成功分配 {assigned_count} 个文件")
 
@@ -135,6 +169,20 @@ class FileTaskAssigner:
 
         if len(sorted_workload) > 10:
             print(f"   ... 还有 {len(sorted_workload) - 10} 位贡献者")
+
+        # 性能监控结束
+        total_time = (datetime.now() - main_start).total_seconds()
+        print(f"✅ [PERF] 文件任务分配总完成时间: {total_time:.3f}s")
+        print(f"📊 [PERF] 处理统计: 总计{total_files}个文件, 平均{total_time/total_files*1000:.1f}ms/文件")
+        
+        # 保存性能日志
+        self._save_performance_log(total_files, total_time, {
+            'get_contributors': step1_time,
+            'batch_analysis': batch_time,
+            'file_assignment': step3_time,
+            'save_results': step4_time,
+            'mode': 'file_task_assigner'
+        })
 
         return {
             "assigned_count": assigned_count,
@@ -426,3 +474,46 @@ class FileTaskAssigner:
                 "created_at": file_plan.get("created_at"),
             },
         }
+    
+    def _save_performance_log(self, file_count, total_time, step_times):
+        """保存性能日志到文件"""
+        try:
+            # 设置日志文件路径
+            if hasattr(self.contributor_analyzer, 'git_ops') and hasattr(self.contributor_analyzer.git_ops, 'repo_path'):
+                repo_path = Path(self.contributor_analyzer.git_ops.repo_path)
+            else:
+                repo_path = Path(".")
+                
+            log_file = repo_path / ".merge_work" / "performance_log.json"
+            log_file.parent.mkdir(exist_ok=True)
+            
+            log_entry = {
+                'timestamp': datetime.now().isoformat(),
+                'file_count': file_count,
+                'total_time': total_time,
+                'avg_time_per_file': total_time / file_count * 1000,  # ms
+                'step_times': step_times,
+                'mode': step_times.get('mode', 'file_task_assigner')
+            }
+            
+            # 如果文件存在，加载现有日志
+            logs = []
+            if log_file.exists():
+                try:
+                    with open(log_file, 'r', encoding='utf-8') as f:
+                        logs = json.load(f)
+                except:
+                    logs = []
+            
+            # 添加新日志（保留最近50条）
+            logs.append(log_entry)
+            logs = logs[-50:]
+            
+            # 保存日志
+            with open(log_file, 'w', encoding='utf-8') as f:
+                json.dump(logs, f, indent=2, ensure_ascii=False)
+            
+            print(f"📝 [PERF] 性能日志已保存: {log_file}")
+            
+        except Exception as e:
+            print(f"⚠️ [PERF] 保存性能日志失败: {e}")
