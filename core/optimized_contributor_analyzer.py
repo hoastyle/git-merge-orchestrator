@@ -16,6 +16,7 @@ from utils.performance_monitor import (
     timing_context,
     global_performance_stats,
 )
+from utils.smart_cache import get_cache_manager
 
 
 class OptimizedContributorAnalyzer:
@@ -28,7 +29,10 @@ class OptimizedContributorAnalyzer:
         )
         self.cache_lock = threading.Lock()
 
-        # 内存缓存
+        # 智能缓存管理器
+        self.smart_cache = get_cache_manager(git_ops.repo_path)
+
+        # 内存缓存（保留向后兼容）
         self._file_contributors_cache = {}
         self._directory_contributors_cache = {}
         self._active_contributors_cache = None
@@ -168,7 +172,14 @@ class OptimizedContributorAnalyzer:
         return critical_files, regular_files
 
     def _analyze_single_file_with_follow(self, filepath):
-        """单文件深度分析（支持重命名跟踪）"""
+        """单文件深度分析（支持重命名跟踪）- 使用智能缓存"""
+        # 先检查智能缓存
+        cache_result = self.smart_cache.get(
+            "file_contributors", filepath, max_age_hours=12
+        )
+        if cache_result is not None:
+            return cache_result
+
         try:
             contributors = {}
 
@@ -222,6 +233,8 @@ class OptimizedContributorAnalyzer:
                             "score": count * SCORING_WEIGHTS["total_commits"],
                         }
 
+            # 存储到智能缓存
+            self.smart_cache.put("file_contributors", filepath, contributors)
             return contributors
         except Exception as e:
             print(f"深度分析文件 {filepath} 时出错: {e}")
@@ -237,7 +250,7 @@ class OptimizedContributorAnalyzer:
         ).strftime("%Y-%m-%d")
 
         # 分批处理，避免命令行过长
-        batch_size = 20  # 减小批量大小，提高准确性
+        batch_size = 500  # 增大批量大小以提高性能，同时保持准确性
 
         for i in range(0, len(file_list), batch_size):
             batch_files = file_list[i : i + batch_size]
@@ -289,7 +302,17 @@ class OptimizedContributorAnalyzer:
         return batch_results
 
     def _get_batch_contributors(self, file_list, since_date=None):
-        """获取批量文件的贡献者信息"""
+        """获取批量文件的贡献者信息 - 使用优化的Git操作"""
+        # 直接使用git_operations中的批量方法
+        try:
+            batch_results = self.git_ops.get_contributors_batch(file_list, since_date)
+            return batch_results
+        except Exception as e:
+            print(f"⚠️ 批量处理失败，回退到传统方法: {str(e)}")
+            return self._get_batch_contributors_fallback(file_list, since_date)
+
+    def _get_batch_contributors_fallback(self, file_list, since_date=None):
+        """批量贡献者获取的回退方法"""
         contributors_by_file = defaultdict(lambda: defaultdict(int))
 
         # 构建文件参数
@@ -353,7 +376,16 @@ class OptimizedContributorAnalyzer:
 
         # 并行处理每个组
         results = {}
-        with ThreadPoolExecutor(max_workers=min(4, len(groups))) as executor:
+        # 动态确定线程数：基于CPU核心数和任务数
+        import multiprocessing
+
+        max_workers = min(
+            multiprocessing.cpu_count() * 2,  # I/O密集任务可以使用更多线程
+            len(groups),
+            12,  # 避免创建过多线程
+        )
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_group = {
                 executor.submit(self._analyze_single_group, group): group
                 for group in groups
@@ -430,7 +462,14 @@ class OptimizedContributorAnalyzer:
         # 批量分析未缓存的目录
         one_year_ago = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
 
-        with ThreadPoolExecutor(max_workers=3) as executor:
+        # 动态线程池配置
+        import multiprocessing
+
+        max_workers = min(
+            multiprocessing.cpu_count() * 2, len(uncached_dirs), 8  # 目录分析的合理上限
+        )
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_dir = {
                 executor.submit(
                     self._analyze_single_directory, dir_path, one_year_ago

@@ -56,15 +56,18 @@ class ProgressIndicator:
             sys.stdout.write("\r" + " " * (len(self.message) + 10) + "\r")
             sys.stdout.flush()
 
-        # 显示结果消息
+        # 显示结果消息，清理ANSI转义序列
         elapsed_time = time.time() - self.start_time if self.start_time else 0
 
         if error_message:
-            print(f"❌ {error_message} (耗时: {elapsed_time:.1f}秒)")
+            clean_error = self._clean_ansi_text(error_message)
+            print(f"❌ {clean_error} (耗时: {elapsed_time:.1f}秒)")
         elif success_message:
-            print(f"✅ {success_message} (耗时: {elapsed_time:.1f}秒)")
+            clean_success = self._clean_ansi_text(success_message)
+            print(f"✅ {clean_success} (耗时: {elapsed_time:.1f}秒)")
         else:
-            print(f"✅ {self.message}完成 (耗时: {elapsed_time:.1f}秒)")
+            clean_message = self._clean_ansi_text(self.message)
+            print(f"✅ {clean_message}完成 (耗时: {elapsed_time:.1f}秒)")
 
     def _spin(self):
         """旋转动画循环"""
@@ -72,13 +75,29 @@ class ProgressIndicator:
             char = self.spinner_chars[self.spinner_index]
             elapsed = time.time() - self.start_time if self.start_time else 0
 
-            # 显示旋转字符和经过时间
-            display_text = f"\r{char} {self.message}... ({elapsed:.1f}s)"
+            # 显示旋转字符和经过时间，清理ANSI转义序列
+            display_text = (
+                f"\r{char} {self._clean_ansi_text(self.message)}... ({elapsed:.1f}s)"
+            )
+
+            # 确保输出行长度一致，避免显示残留
+            min_width = 50
+            if len(display_text) < min_width:
+                display_text += " " * (min_width - len(display_text))
+
             sys.stdout.write(display_text)
             sys.stdout.flush()
 
             self.spinner_index = (self.spinner_index + 1) % len(self.spinner_chars)
             time.sleep(0.1)
+
+    def _clean_ansi_text(self, text: str) -> str:
+        """清理文本中的ANSI转义序列，避免显示冲突"""
+        import re
+
+        # 移除ANSI转义序列
+        ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+        return ansi_escape.sub("", text)
 
     def update_message(self, new_message: str):
         """更新进度消息"""
@@ -95,43 +114,84 @@ class ProgressTracker:
         self.start_time = time.time()
         self.step_messages = []
 
+        # 大量任务优化
+        self.batch_mode = total_steps > 1000
+        self.last_update_time = time.time()
+        self.update_interval = 1.0 if self.batch_mode else 0.1  # 批量模式减少更新频率
+
     def step(self, message: str = ""):
         """执行下一步"""
         self.current_step += 1
+        current_time = time.time()
 
-        # 计算进度百分比
-        progress = (self.current_step / self.total_steps) * 100
-
-        # 计算预计剩余时间
-        elapsed = time.time() - self.start_time
-        if self.current_step > 0:
-            avg_time_per_step = elapsed / self.current_step
-            remaining_steps = self.total_steps - self.current_step
-            eta = avg_time_per_step * remaining_steps
-        else:
-            eta = 0
-
-        # 显示进度
-        progress_bar = self._create_progress_bar(progress)
-        step_msg = f" - {message}" if message else ""
-
-        print(
-            f"📍 步骤 {self.current_step}/{self.total_steps}: {self.description} "
-            f"{progress_bar} {progress:.0f}%{step_msg}"
+        # 大量任务时，限制更新频率以提高性能
+        should_display = (
+            not self.batch_mode
+            or (current_time - self.last_update_time) >= self.update_interval
+            or self.current_step == self.total_steps
+            or self.current_step % max(1, self.total_steps // 100)  # 总是显示最后一步
+            == 0  # 每1%显示一次
         )
 
-        if eta > 0 and self.current_step < self.total_steps:
-            print(f"   ⏱️ 预计剩余时间: {eta:.1f}秒")
+        if should_display:
+            # 计算进度百分比
+            progress = (self.current_step / self.total_steps) * 100
 
-        # 记录步骤信息
+            # 计算预计剩余时间
+            elapsed = current_time - self.start_time
+            if self.current_step > 0:
+                avg_time_per_step = elapsed / self.current_step
+                remaining_steps = self.total_steps - self.current_step
+                eta = avg_time_per_step * remaining_steps
+            else:
+                eta = 0
+
+            # 显示进度
+            progress_bar = self._create_progress_bar(progress)
+            step_msg = f" - {message}" if message else ""
+
+            if self.batch_mode:
+                # 批量模式：更简洁的显示
+                print(
+                    f"📊 {self.description}: {self.current_step}/{self.total_steps} "
+                    f"{progress_bar} {progress:.1f}%"
+                )
+                if eta > 0 and self.current_step < self.total_steps:
+                    eta_msg = self._format_time(eta)
+                    print(f"   ⏱️ ETA: {eta_msg}")
+            else:
+                # 普通模式：详细显示
+                print(
+                    f"📍 步骤 {self.current_step}/{self.total_steps}: {self.description} "
+                    f"{progress_bar} {progress:.0f}%{step_msg}"
+                )
+                if eta > 0 and self.current_step < self.total_steps:
+                    print(f"   ⏱️ 预计剩余时间: {eta:.1f}秒")
+
+            self.last_update_time = current_time
+
+        # 记录步骤信息（始终记录，用于统计）
         self.step_messages.append(
             {
                 "step": self.current_step,
                 "message": message,
                 "timestamp": datetime.now(),
-                "elapsed": elapsed,
+                "elapsed": current_time - self.start_time,
             }
         )
+
+    def _format_time(self, seconds: float) -> str:
+        """格式化时间显示"""
+        if seconds < 60:
+            return f"{seconds:.0f}s"
+        elif seconds < 3600:
+            minutes = int(seconds // 60)
+            remaining_seconds = int(seconds % 60)
+            return f"{minutes}m{remaining_seconds}s"
+        else:
+            hours = int(seconds // 3600)
+            minutes = int((seconds % 3600) // 60)
+            return f"{hours}h{minutes}m"
 
     def _create_progress_bar(self, progress: float, width: int = 20) -> str:
         """创建进度条"""

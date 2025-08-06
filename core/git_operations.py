@@ -145,6 +145,115 @@ class GitOperations:
 
         return author_counts
 
+    def get_contributors_batch(self, file_paths, since_date=None):
+        """批量获取多个文件的贡献者 - 性能优化版本"""
+        if not file_paths:
+            return {}
+
+        # 限制单次批量处理的文件数量，避免命令行过长
+        batch_size = min(len(file_paths), 1000)
+        file_paths = file_paths[:batch_size]
+
+        # 构建批量查询命令
+        files_arg = " ".join([f'"{path}"' for path in file_paths])
+
+        if since_date:
+            cmd = f'git log --since="{since_date}" --format="COMMIT:%an" --name-only -- {files_arg}'
+        else:
+            cmd = f'git log --format="COMMIT:%an" --name-only -- {files_arg}'
+
+        result = self.run_command(cmd)
+        if not result:
+            return {path: {} for path in file_paths}
+
+        # 解析批量结果
+        file_contributors = {path: {} for path in file_paths}
+        current_author = None
+
+        for line in result.split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+
+            if line.startswith("COMMIT:"):
+                current_author = line[7:].strip()  # 移除 'COMMIT:' 前缀
+            elif current_author and line in file_paths:
+                # 这是一个文件路径，记录当前作者对该文件的贡献
+                if current_author not in file_contributors[line]:
+                    file_contributors[line][current_author] = 0
+                file_contributors[line][current_author] += 1
+
+        return file_contributors
+
+    def get_contributors_batch_optimized(
+        self, file_paths, since_date=None, max_commits=None
+    ):
+        """高度优化的批量贡献者获取 - 支持采样和缓存"""
+        if not file_paths:
+            return {}
+
+        # 对于大量文件，使用目录级分组来减少Git调用
+        directory_groups = self._group_files_by_directory(file_paths)
+        all_results = {}
+
+        for directory, files_in_dir in directory_groups.items():
+            if len(files_in_dir) > 50:
+                # 大目录使用采样策略
+                result = self._get_directory_contributors_with_sampling(
+                    directory, files_in_dir, since_date, max_commits
+                )
+            else:
+                # 小目录使用常规批量处理
+                result = self.get_contributors_batch(files_in_dir, since_date)
+
+            all_results.update(result)
+
+        return all_results
+
+    def _group_files_by_directory(self, file_paths):
+        """按目录分组文件路径"""
+        from collections import defaultdict
+        import os
+
+        directory_groups = defaultdict(list)
+        for file_path in file_paths:
+            directory = os.path.dirname(file_path) or "."
+            directory_groups[directory].append(file_path)
+
+        return dict(directory_groups)
+
+    def _get_directory_contributors_with_sampling(
+        self, directory, file_paths, since_date=None, max_commits=200
+    ):
+        """使用采样策略获取目录级贡献者 - 适用于大目录"""
+        # 先获取目录级的提交历史（采样）
+        if since_date:
+            cmd = f'git log --since="{since_date}" -n {max_commits or 200} --format="COMMIT:%an" --name-only -- "{directory}"'
+        else:
+            cmd = f'git log -n {max_commits or 200} --format="COMMIT:%an" --name-only -- "{directory}"'
+
+        result = self.run_command(cmd)
+        if not result:
+            return {path: {} for path in file_paths}
+
+        # 解析结果并分配到具体文件
+        file_contributors = {path: {} for path in file_paths}
+        current_author = None
+
+        for line in result.split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+
+            if line.startswith("COMMIT:"):
+                current_author = line[7:].strip()
+            elif current_author and line in file_paths:
+                if current_author not in file_contributors[line]:
+                    file_contributors[line][current_author] = 0
+                file_contributors[line][current_author] += 1
+
+        return file_contributors
+
     def get_active_contributors(self, months=3):
         """获取近N个月有提交的活跃贡献者列表"""
         cutoff_date = (datetime.now() - timedelta(days=months * 30)).strftime(
@@ -344,17 +453,19 @@ class GitOperations:
     def create_file_merge_branch(self, file_path, assignee, integration_branch):
         """为单个文件创建合并分支"""
         # 使用文件路径创建安全的分支名
-        safe_file_name = file_path.replace('/', '-').replace(' ', '_').replace('.', '_')
-        safe_assignee = assignee.replace(' ', '-').replace('.', '_')
-        
+        safe_file_name = file_path.replace("/", "-").replace(" ", "_").replace(".", "_")
+        safe_assignee = assignee.replace(" ", "-").replace(".", "_")
+
         branch_name = f"feat/merge-file-{safe_file_name}-{safe_assignee}"
-        
+
         # 限制分支名长度，避免过长
         if len(branch_name) > 100:
             # 只保留文件名的后部分
-            file_suffix = safe_file_name[-30:] if len(safe_file_name) > 30 else safe_file_name
+            file_suffix = (
+                safe_file_name[-30:] if len(safe_file_name) > 30 else safe_file_name
+            )
             branch_name = f"feat/merge-file-{file_suffix}-{safe_assignee}"
-            
+
             # 如果还是太长，使用时间戳
             if len(branch_name) > 100:
                 timestamp = datetime.now().strftime("%m%d_%H%M")
@@ -375,9 +486,9 @@ class GitOperations:
     def create_file_batch_merge_branch(self, assignee, integration_branch):
         """创建文件批量合并分支"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        safe_assignee = assignee.replace(' ', '-').replace('.', '_')
+        safe_assignee = assignee.replace(" ", "-").replace(".", "_")
         branch_name = f"feat/merge-file-batch-{safe_assignee}-{timestamp}"
-        
+
         # 限制分支名长度
         if len(branch_name) > 100:
             short_assignee = safe_assignee[:20]
@@ -400,7 +511,9 @@ class GitOperations:
             contributors = {}
 
             # 获取最近N个月的贡献统计
-            cutoff_date = (datetime.now() - timedelta(days=months * 30)).strftime("%Y-%m-%d")
+            cutoff_date = (datetime.now() - timedelta(days=months * 30)).strftime(
+                "%Y-%m-%d"
+            )
             recent_cmd = f'git log --follow --since="{cutoff_date}" --format="%an" -- "{file_path}"'
             recent_result = self.run_command(recent_cmd)
 
@@ -409,7 +522,9 @@ class GitOperations:
                 recent_author_counts = {}
                 for author in recent_authors:
                     if author.strip():
-                        recent_author_counts[author] = recent_author_counts.get(author, 0) + 1
+                        recent_author_counts[author] = (
+                            recent_author_counts.get(author, 0) + 1
+                        )
 
                 for author, count in recent_author_counts.items():
                     contributors[author] = {

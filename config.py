@@ -79,7 +79,7 @@ DEFAULT_IGNORE_PATTERNS = [
     "*.rar",
     "*.7z",
     # customize
-    "settings/",
+    # "settings/",
 ]
 
 # 忽略规则类型
