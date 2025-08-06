@@ -1650,6 +1650,128 @@ class MenuManager:
 
     # === 未分配文件管理 ===
 
+    def _load_plan_data(self):
+        """统一的计划数据加载方法，兼容不同的计划管理器类型"""
+        try:
+            # 根据处理模式选择合适的计划管理器
+            processing_mode = getattr(self.orchestrator, 'processing_mode', 'group_based')
+            
+            if processing_mode == "file_level":
+                # 文件级模式：使用FilePlanManager
+                if hasattr(self.orchestrator, 'file_plan_manager'):
+                    plan = self.orchestrator.file_plan_manager.file_manager.load_file_plan()
+                    if plan and 'files' in plan:
+                        # 转换文件级计划为组格式以保持兼容性
+                        return self._convert_file_plan_to_group_format(plan)
+                    return plan
+                else:
+                    return None
+            else:
+                # 组级模式：使用PlanManager
+                if hasattr(self.orchestrator, 'plan_manager'):
+                    # PlanManager使用file_helper来加载计划
+                    return self.orchestrator.plan_manager.file_helper.load_plan()
+                else:
+                    return None
+                    
+        except Exception as e:
+            print(f"⚠️ 加载计划数据失败: {e}")
+            return None
+            
+    def _convert_file_plan_to_group_format(self, file_plan):
+        """将文件级计划转换为组格式以保持兼容性"""
+        try:
+            # 创建虚拟组结构
+            groups = []
+            for file_data in file_plan.get('files', []):
+                # 每个文件作为一个组
+                group = {
+                    'name': f"file_{file_data.get('path', 'unknown')}",
+                    'group_name': file_data.get('path', 'unknown'),
+                    'files': [file_data.get('path', 'unknown')],
+                    'assignee': file_data.get('assignee', ''),
+                    'status': file_data.get('status', 'pending'),
+                    'assignment_reason': file_data.get('assignment_reason', ''),
+                    'created_at': file_data.get('created_at', ''),
+                    'updated_at': file_data.get('updated_at', ''),
+                    'file_count': 1
+                }
+                groups.append(group)
+                
+            # 返回转换后的计划
+            converted_plan = dict(file_plan)
+            converted_plan['groups'] = groups
+            return converted_plan
+        except Exception as e:
+            print(f"⚠️ 文件计划转换失败: {e}")
+            return file_plan
+            
+    def _save_plan_data(self, plan_data):
+        """统一的计划数据保存方法，兼容不同的计划管理器类型"""
+        try:
+            # 根据处理模式选择合适的保存方式
+            processing_mode = getattr(self.orchestrator, 'processing_mode', 'group_based')
+            
+            if processing_mode == "file_level":
+                # 文件级模式：需要将组格式转换回文件格式再保存
+                if hasattr(self.orchestrator, 'file_plan_manager'):
+                    # 如果原始数据是文件级的，需要转换回文件格式
+                    if 'files' in plan_data:
+                        # 原本就是文件级格式，直接保存
+                        file_plan = plan_data
+                    else:
+                        # 从组格式转换回文件格式
+                        file_plan = self._convert_group_to_file_format(plan_data)
+                    
+                    self.orchestrator.file_plan_manager.file_manager.save_file_plan(file_plan)
+                    return True
+            else:
+                # 组级模式：使用PlanManager保存
+                if hasattr(self.orchestrator, 'plan_manager'):
+                    self.orchestrator.plan_manager.file_helper.save_plan(plan_data)
+                    return True
+                    
+            return False
+        except Exception as e:
+            print(f"⚠️ 保存计划数据失败: {e}")
+            return False
+            
+    def _convert_group_to_file_format(self, plan_data):
+        """将组格式转换回文件格式（用于文件级保存）"""
+        try:
+            # 从组数据中提取文件信息
+            files = []
+            for group in plan_data.get("groups", []):
+                for file_path in group.get("files", []):
+                    file_data = {
+                        'path': file_path,
+                        'assignee': group.get('assignee', ''),
+                        'status': group.get('status', 'pending'),
+                        'assignment_reason': group.get('assignment_reason', ''),
+                        'created_at': group.get('created_at', ''),
+                        'updated_at': group.get('updated_at', '')
+                    }
+                    files.append(file_data)
+            
+            # 构建文件级计划结构
+            file_plan = {
+                'processing_mode': 'file_level',
+                'source_branch': plan_data.get('source_branch', ''),
+                'target_branch': plan_data.get('target_branch', ''),
+                'integration_branch': plan_data.get('integration_branch', ''),
+                'created_at': plan_data.get('created_at', ''),
+                'files': files,
+                'metadata': {
+                    'total_files': len(files),
+                    'assigned_files': len([f for f in files if f.get('assignee')]),
+                    'unassigned_files': len([f for f in files if not f.get('assignee')])
+                }
+            }
+            return file_plan
+        except Exception as e:
+            print(f"⚠️ 组到文件格式转换失败: {e}")
+            return plan_data
+
     def _show_unassigned_files(self):
         """显示未分配文件详情和解决方案"""
         print("\n⚠️ 未分配文件详情分析")
@@ -1718,11 +1840,12 @@ class MenuManager:
     def _get_file_unassigned_reason(self, file_path):
         """获取特定文件的未分配原因"""
         try:
-            # 找到包含该文件的组
-            plan_data = self.orchestrator.plan_manager.load_plan()
+            # 使用统一的计划数据加载方法
+            plan_data = self._load_plan_data()
             if not plan_data:
                 return "无法加载项目计划数据"
 
+            # 查找包含该文件的组
             for group in plan_data.get("groups", []):
                 if file_path in group.get("files", []):
                     assignment_reason = group.get("assignment_reason", "")
@@ -1858,7 +1981,7 @@ class MenuManager:
         """获取可用的负责人列表"""
         try:
             # 从项目计划中获取所有已知的负责人
-            plan_data = self.orchestrator.plan_manager.load_plan()
+            plan_data = self._load_plan_data()
             if not plan_data:
                 return []
 
@@ -1884,7 +2007,7 @@ class MenuManager:
     def _assign_file_to_person(self, file_path, assignee):
         """将文件分配给指定负责人"""
         try:
-            plan_data = self.orchestrator.plan_manager.load_plan()
+            plan_data = self._load_plan_data()
             if not plan_data:
                 return False
 
@@ -1895,9 +2018,8 @@ class MenuManager:
                     group["assignment_reason"] = "手动分配"
                     group["status"] = "assigned"
 
-                    # 保存更新后的计划
-                    self.orchestrator.plan_manager.save_plan(plan_data)
-                    return True
+                    # 保存更新后的计划（需要兼容不同的保存方式）
+                    return self._save_plan_data(plan_data)
 
             return False
         except Exception as e:
@@ -1990,7 +2112,7 @@ class MenuManager:
     def _get_assignee_workload(self, assignee):
         """获取负责人的工作负载统计"""
         try:
-            plan_data = self.orchestrator.plan_manager.load_plan()
+            plan_data = self._load_plan_data()
             if not plan_data:
                 return {"groups": 0, "files": 0, "status": "未知"}
 
