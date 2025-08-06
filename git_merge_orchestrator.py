@@ -777,6 +777,42 @@ class GitMergeOrchestrator:
             self.integration_branch,
         )
 
+    def merge_file(self, file_path):
+        """合并指定文件 - 仅支持文件级处理模式"""
+        if not self.integration_branch:
+            DisplayHelper.print_error("无法确定集成分支，请先创建合并计划")
+            return False
+
+        # 检查是否为文件级处理模式
+        if self.processing_mode != "file_level":
+            DisplayHelper.print_error("单文件合并仅在文件级处理模式下支持，当前为组模式")
+            return False
+
+        # 检查文件是否存在于计划中
+        file_info = self.file_manager.find_file_by_path(file_path)
+        if not file_info:
+            DisplayHelper.print_error(f"文件 '{file_path}' 不在合并计划中")
+            return False
+
+        assignee = file_info.get("assignee", "未分配")
+        print(f"📄 文件: {file_path}")
+        print(f"👤 负责人: {assignee}")
+
+        # 获取当前合并执行器
+        merge_executor = self.get_current_merge_executor()
+        strategy_info = self.get_merge_strategy_info()
+
+        print(f"📊 当前合并策略: {strategy_info['mode_name']}")
+        print(f"📝 策略说明: {strategy_info['description']}")
+
+        return merge_executor.merge_file(
+            file_path,
+            assignee,
+            self.source_branch,
+            self.target_branch,
+            self.integration_branch,
+        )
+
     def interactive_merge_group(self, group_name):
         """交互式合并指定组"""
         if not self.integration_branch:

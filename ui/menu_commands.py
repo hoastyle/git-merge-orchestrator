@@ -167,6 +167,22 @@ class MenuCommands:
             DisplayHelper.print_error(f"负责人 '{assignee_name}' 的任务批量合并失败")
             return False
 
+    def execute_merge_file(self, file_path):
+        """执行单个文件合并"""
+        if not file_path:
+            DisplayHelper.print_error("文件路径不能为空")
+            return False
+
+        print(f"📄 正在为文件 '{file_path}' 生成合并脚本...")
+        success = self.orchestrator.merge_file(file_path)
+        if success:
+            print("✅ 文件合并脚本已生成")
+            print("💡 请查看生成的脚本文件并执行")
+            return True
+        else:
+            DisplayHelper.print_error(f"文件 '{file_path}' 合并失败")
+            return False
+
     def execute_finalize_merge(self):
         """执行最终合并"""
         print("🎉 正在执行最终合并...")
