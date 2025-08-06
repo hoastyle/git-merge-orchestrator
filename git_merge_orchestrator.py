@@ -546,6 +546,12 @@ class GitMergeOrchestrator:
 
     def search_assignee_tasks(self, assignee_name):
         """根据负责人搜索其负责的所有模块"""
+        # 根据处理模式选择正确的搜索方法
+        if self.processing_mode == "file_level":
+            # 在文件级模式下，使用FilePlanManager的专用搜索方法
+            return self.file_plan_manager.search_files_by_assignee(assignee_name)
+
+        # 传统组模式的处理逻辑
         plan = self.file_helper.load_plan()
         if not plan:
             DisplayHelper.print_error("合并计划文件不存在，请先运行创建合并计划")
