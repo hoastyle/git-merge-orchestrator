@@ -425,46 +425,22 @@ class FilePlanManager:
 
     def search_files_by_assignee(self, assignee_name):
         """根据负责人搜索其负责的所有文件"""
+        from utils.display_utils import display_files_interactive
+        from config import AUTO_DISPLAY_THRESHOLD
+
         files = self.file_manager.get_files_by_assignee(assignee_name)
 
         if not files:
             print(f"📋 负责人 '{assignee_name}' 暂无分配的文件")
             return []
 
-        print(f"👤 负责人: {assignee_name}")
-        print(f"📊 总览: {len(files)} 个文件")
+        # 使用新的交互式显示功能
+        title = f"负责人 '{assignee_name}' 的文件列表"
+        context = f"负责人: {assignee_name}"
 
-        # 统计状态分布
-        status_stats = defaultdict(int)
-        for file_info in files:
-            status_stats[file_info["status"]] += 1
-
-        print(f"📈 状态分布:")
-        for status, count in status_stats.items():
-            status_display = {
-                "pending": "待处理",
-                "assigned": "已分配",
-                "in_progress": "进行中",
-                "completed": "已完成",
-            }.get(status, status)
-            print(f"  {status_display}: {count} 个文件")
-
-        # 显示文件列表
-        print(f"\n📄 文件详情:")
-        for i, file_info in enumerate(files[:20], 1):  # 最多显示20个文件
-            status_icon = {
-                "pending": "⏳",
-                "assigned": "📋",
-                "in_progress": "🔄",
-                "completed": "✅",
-            }.get(file_info["status"], "❓")
-
-            print(f"  {i:2d}. {status_icon} {file_info['path']}")
-            if file_info.get("assignment_reason"):
-                print(f"      原因: {file_info['assignment_reason'][:50]}...")
-
-        if len(files) > 20:
-            print(f"  ... 还有 {len(files) - 20} 个文件")
+        display_files_interactive(
+            files, title=title, context=context, work_dir=self.file_manager.work_dir
+        )
 
         return files
 

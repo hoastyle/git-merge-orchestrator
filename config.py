@@ -19,6 +19,15 @@ WORK_DIR_NAME = ".merge_work"
 PLAN_FILE_NAME = "merge_plan.json"
 IGNORE_FILE_NAME = ".merge_ignore"
 
+# 显示配置
+DEFAULT_FILE_DISPLAY_LIMIT = 20  # 默认文件显示数量限制
+AUTO_DISPLAY_THRESHOLD = 20  # 自动显示阈值，超过此数量将提供选择菜单
+ENABLE_INTERACTIVE_DISPLAY = True  # 启用交互式显示
+AUTO_EXPORT_LARGE_LISTS = True  # 超过50个文件时自动建议导出
+LARGE_LIST_THRESHOLD = 50  # 大列表阈值
+EXPORT_SUBDIR = "file_lists"  # 导出文件的子目录名
+PAGINATED_PAGE_SIZE = 20  # 分页显示时每页的文件数量
+
 # 默认忽略规则配置
 DEFAULT_IGNORE_PATTERNS = [
     # Python相关

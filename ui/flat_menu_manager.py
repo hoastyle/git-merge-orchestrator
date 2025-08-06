@@ -250,34 +250,18 @@ class FlatMenuManager:
                     normalized_status
                 )
                 if files:
-                    print(f"\n📊 状态为 '{status}' 的文件列表 ({len(files)} 个):")
-                    print("-" * 50)
+                    from utils.display_utils import display_files_interactive
 
-                    for i, file_info in enumerate(files[:20], 1):  # 最多显示20个
-                        assignee = file_info.get("assignee", "未分配")
-                        print(f"  {i:2d}. {file_info['path']}")
-                        print(f"      👤 负责人: {assignee}")
-                        if file_info.get("assignment_reason"):
-                            print(
-                                f"      📝 原因: {file_info['assignment_reason'][:40]}..."
-                            )
-                        print()
+                    # 使用新的交互式显示功能
+                    title = f"状态为 '{status}' 的文件"
+                    context = f"状态: {status} ({len(files)} 个文件)"
 
-                    if len(files) > 20:
-                        print(f"  ... 还有 {len(files) - 20} 个文件")
-
-                    # 显示统计信息
-                    assignee_stats = {}
-                    for f in files:
-                        assignee = f.get("assignee", "未分配")
-                        assignee_stats[assignee] = assignee_stats.get(assignee, 0) + 1
-
-                    print(f"\n👥 负责人分布:")
-                    for assignee, count in sorted(
-                        assignee_stats.items(), key=lambda x: x[1], reverse=True
-                    ):
-                        print(f"  {assignee}: {count} 个文件")
-
+                    display_files_interactive(
+                        files,
+                        title=title,
+                        context=context,
+                        work_dir=self.orchestrator.file_helper.work_dir,
+                    )
                 else:
                     print(f"📭 未找到状态为 '{status}' 的文件")
             except Exception as e:
