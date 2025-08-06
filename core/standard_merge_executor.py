@@ -13,13 +13,19 @@ class StandardMergeExecutor(BaseMergeExecutor):
     def get_strategy_description(self):
         return "标准Git三路合并，产生冲突标记 <<<<<<< ======= >>>>>>>"
 
-    def generate_merge_script(self, group_name, assignee, files, branch_name, source_branch, target_branch):
+    def generate_merge_script(
+        self, group_name, assignee, files, branch_name, source_branch, target_branch
+    ):
         """生成Standard合并脚本"""
         analysis = self.analyze_file_modifications(files, source_branch, target_branch)
 
-        script_content = self._generate_common_script_header(group_name, assignee, files, branch_name)
+        script_content = self._generate_common_script_header(
+            group_name, assignee, files, branch_name
+        )
 
-        script_content += self._generate_merge_base_section(source_branch, target_branch)
+        script_content += self._generate_merge_base_section(
+            source_branch, target_branch
+        )
 
         script_content += f"""
 merge_success=true
@@ -35,8 +41,12 @@ echo "   >>>>>>> {source_branch}  (源分支内容)"
 echo ""
 """
 
-        script_content += self._generate_common_file_processing_sections(analysis, source_branch)
-        script_content += self._generate_strategy_specific_merge_logic(analysis, source_branch, target_branch)
+        script_content += self._generate_common_file_processing_sections(
+            analysis, source_branch
+        )
+        script_content += self._generate_strategy_specific_merge_logic(
+            analysis, source_branch, target_branch
+        )
 
         # Standard特定的冲突处理说明
         script_content += """
@@ -73,7 +83,9 @@ else
 fi
 """
 
-        script_content += self._generate_common_script_footer(group_name, len(files), branch_name)
+        script_content += self._generate_common_script_footer(
+            group_name, len(files), branch_name
+        )
 
         return script_content
 
@@ -87,13 +99,17 @@ fi
         target_branch,
     ):
         """生成Standard批量合并脚本"""
-        analysis = self.analyze_file_modifications(all_files, source_branch, target_branch)
+        analysis = self.analyze_file_modifications(
+            all_files, source_branch, target_branch
+        )
 
         script_content = self._generate_common_script_header(
             f"batch-{assignee}", assignee, all_files, batch_branch_name, "批量"
         )
 
-        script_content += self._generate_merge_base_section(source_branch, target_branch)
+        script_content += self._generate_merge_base_section(
+            source_branch, target_branch
+        )
 
         script_content += f"""
 echo "📄 组别详情:"
@@ -113,8 +129,12 @@ echo "   >>>>>>> {source_branch}  (源分支内容)"
 echo ""
 """
 
-        script_content += self._generate_common_file_processing_sections(analysis, source_branch)
-        script_content += self._generate_strategy_specific_merge_logic(analysis, source_branch, target_branch)
+        script_content += self._generate_common_file_processing_sections(
+            analysis, source_branch
+        )
+        script_content += self._generate_strategy_specific_merge_logic(
+            analysis, source_branch, target_branch
+        )
 
         # Standard批量特定的冲突处理说明
         script_content += """
@@ -169,7 +189,9 @@ fi
 
         return script_content
 
-    def _generate_strategy_specific_merge_logic(self, analysis, source_branch, target_branch):
+    def _generate_strategy_specific_merge_logic(
+        self, analysis, source_branch, target_branch
+    ):
         """生成Standard特定的合并逻辑 - 真正的三路合并"""
         modified_in_both = analysis["modified_in_both"]
 
@@ -287,13 +309,17 @@ echo " - 考虑在合并后创建临时分支备份"
 
     # === 文件级合并方法实现 ===
 
-    def generate_file_merge_script(self, file_info, branch_name, source_branch, target_branch):
+    def generate_file_merge_script(
+        self, file_info, branch_name, source_branch, target_branch
+    ):
         """生成单个文件的Standard合并脚本"""
         file_path = file_info["path"]
         assignee = file_info.get("assignee", "未分配")
-        
-        analysis = self.analyze_file_modifications([file_path], source_branch, target_branch)
-        
+
+        analysis = self.analyze_file_modifications(
+            [file_path], source_branch, target_branch
+        )
+
         script_content = f"""#!/bin/bash
 # Git Merge Orchestrator - 文件级Standard合并脚本
 # 生成时间: {self._get_current_time()}
@@ -313,9 +339,11 @@ echo "💡 策略: Standard三路合并"
 echo ""
 
 """
-        
-        script_content += self._generate_merge_base_section(source_branch, target_branch)
-        
+
+        script_content += self._generate_merge_base_section(
+            source_branch, target_branch
+        )
+
         script_content += f"""
 merge_success=true
 conflicts_found=false
@@ -442,13 +470,17 @@ echo ""
 """
 
         script_content += self._get_file_strategy_footer_notes()
-        
+
         return script_content
 
-    def generate_file_batch_merge_script(self, assignee, file_list, batch_branch_name, source_branch, target_branch):
+    def generate_file_batch_merge_script(
+        self, assignee, file_list, batch_branch_name, source_branch, target_branch
+    ):
         """生成文件批量Standard合并脚本"""
         file_paths = [f["path"] for f in file_list]
-        analysis = self.analyze_file_modifications(file_paths, source_branch, target_branch)
+        analysis = self.analyze_file_modifications(
+            file_paths, source_branch, target_branch
+        )
 
         script_content = f"""#!/bin/bash
 # Git Merge Orchestrator - 文件批量Standard合并脚本
@@ -474,8 +506,10 @@ echo ""
 
 """
 
-        script_content += self._generate_merge_base_section(source_branch, target_branch)
-        
+        script_content += self._generate_merge_base_section(
+            source_branch, target_branch
+        )
+
         script_content += f"""
 merge_success=true
 conflicts_found=false
@@ -499,7 +533,7 @@ echo ""
 echo "📄 处理文件: {file_path}"
 
 """
-            
+
             if file_path in analysis["modified_in_both"]:
                 script_content += f"""
 # 创建临时目录用于三路合并
@@ -626,7 +660,7 @@ echo ""
 """
 
         script_content += self._get_file_batch_strategy_footer_notes()
-        
+
         return script_content
 
     def _get_file_strategy_footer_notes(self):
@@ -653,3 +687,93 @@ echo " - 可以分批提交，便于管理和问题回滚"
 echo " - 优先处理无冲突文件，逐步解决复杂问题"
 echo ""
 """
+
+    def generate_file_batch_merge_script(
+        self, assignee, assignee_files, batch_branch_name, source_branch, target_branch
+    ):
+        """生成Standard文件级批量合并脚本"""
+        analysis = self.analyze_file_modifications(
+            assignee_files, source_branch, target_branch
+        )
+
+        script_content = self._generate_common_script_header(
+            f"file-batch-{assignee}",
+            assignee,
+            assignee_files,
+            batch_branch_name,
+            "文件级批量",
+        )
+
+        script_content += self._generate_merge_base_section(
+            source_branch, target_branch
+        )
+
+        script_content += f"""
+echo "📄 文件级批量处理详情:"
+echo "  负责人: {assignee}"
+echo "  文件数: {len(assignee_files)} 个"
+echo ""
+
+merge_success=true
+conflicts_found=false
+total_processed=0
+conflict_files=()
+
+echo "🔄 开始Standard文件级批量三路合并..."
+echo "💡 重要说明：对于冲突文件将产生标准冲突标记"
+echo "   <<<<<<< HEAD       (当前分支内容)"
+echo "   ======="
+echo "   >>>>>>> {source_branch}  (源分支内容)"
+echo ""
+"""
+
+        script_content += self._generate_common_file_processing_sections(
+            analysis, source_branch
+        )
+        script_content += self._generate_strategy_specific_merge_logic(
+            analysis, source_branch, target_branch
+        )
+
+        # Standard批量特定的冲突处理说明
+        script_content += """
+echo ""
+if [ "${#conflict_files[@]}" -gt 0 ]; then
+    echo "⚠️ 以下文件包含冲突标记，需要手动解决："
+    for file in "${conflict_files[@]}"; do
+        echo "  - $file"
+    done
+fi
+
+echo ""
+
+if [ "$conflicts_found" = true ]; then
+    echo "⚠️ Standard文件级批量合并中发现冲突文件"
+    echo ""
+    echo "🎯 文件级批量冲突解决策略："
+    echo " 1. 打开VSCode: code ."
+    echo " 2. 逐个处理冲突文件，专注单文件质量"
+    echo " 3. 文件级处理的优势："
+    echo "    - 每个文件独立处理，避免交叉影响"
+    echo "    - 可以按文件功能分批解决冲突"
+    echo "    - 更容易跟踪和回滚问题"
+    echo " 4. 处理完一个文件就添加: git add <已解决文件>"
+    echo " 5. 可以分文件提交，便于管理"
+    echo ""
+elif [ "$merge_success" = true ]; then
+    echo "✅ Standard文件级批量三路合并完成! 所有文件均无冲突"
+    echo ""
+    echo "🎯 后续步骤："
+    echo " 1. 检查合并结果: git status"
+    echo " 2. 提交更改: git add -A && git commit -m 'Standard文件级批量合并完成'"
+    echo " 3. 推送到远程: git push origin $batch_branch_name"
+    echo ""
+else
+    echo "❌ Standard文件级批量合并过程中发现错误"
+fi
+"""
+
+        script_content += self._generate_common_script_footer(
+            f"file-batch-{assignee}", len(assignee_files), batch_branch_name
+        )
+
+        return script_content

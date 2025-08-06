@@ -753,6 +753,16 @@ class GitMergeOrchestrator:
             DisplayHelper.print_error("无法确定集成分支，请先创建合并计划")
             return False
 
+        # 在文件级模式下，需要特殊处理
+        if self.processing_mode == "file_level":
+            # 首先检查该负责人是否有分配的文件
+            files = self.file_manager.get_files_by_assignee(assignee_name)
+            if not files:
+                print(f"❌ 负责人 '{assignee_name}' 没有分配的任务")
+                return False
+
+            print(f"🎯 找到负责人 '{assignee_name}' 的 {len(files)} 个文件")
+
         # 获取当前合并执行器
         merge_executor = self.get_current_merge_executor()
         strategy_info = self.get_merge_strategy_info()
