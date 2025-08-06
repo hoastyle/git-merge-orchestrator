@@ -6,6 +6,7 @@ Git Merge Orchestrator - 文件级计划管理器
 from datetime import datetime
 from collections import defaultdict
 from pathlib import Path
+from utils.progress_indicator import ProgressTracker, ProgressIndicator
 
 
 class FilePlanManager:
@@ -18,30 +19,49 @@ class FilePlanManager:
 
     def analyze_divergence(self, source_branch, target_branch):
         """分析分支分叉情况"""
-        print("🔍 正在分析分支分叉情况...")
+        steps = ["获取分叉点", "统计文件差异", "创建集成分支", "预览合并结果"]
+        tracker = ProgressTracker(len(steps), "分析分支分叉")
 
-        # 获取分叉点
+        # 步骤 1: 获取分叉点
+        tracker.step("获取分叉点")
         merge_base = self.git_ops.get_merge_base(source_branch, target_branch)
         if merge_base:
-            print(f"分叉点: {merge_base}")
+            print(f"   🎯 分叉点: {merge_base[:8]}")
         else:
-            print("❌ 无法确定分叉点")
+            print("   ❌ 无法确定分叉点")
             return None
 
-        # 统计差异
+        # 步骤 2: 统计差异
+        tracker.step("统计文件差异")
         diff_stats = self.git_ops.get_diff_stats(source_branch, target_branch)
         if diff_stats:
-            print(f"\n📊 差异统计:\n{diff_stats}")
+            # 简化差异统计显示
+            lines = diff_stats.strip().split("\n")
+            if lines:
+                summary_line = lines[-1] if "file" in lines[-1] else "差异统计获取完成"
+                print(f"   📊 {summary_line}")
+        else:
+            print("   ⚠️ 无文件差异")
 
-        # 创建集成分支
+        # 步骤 3: 创建集成分支
+        tracker.step("创建集成分支")
         integration_branch = self.git_ops.create_integration_branch(
             source_branch, target_branch
         )
         if not integration_branch:
+            print("   ❌ 集成分支创建失败")
             return None
+        print(f"   ✅ 集成分支: {integration_branch}")
 
-        # 预览合并结果
+        # 步骤 4: 预览合并结果
+        tracker.step("预览合并结果")
         merge_result = self.git_ops.preview_merge(source_branch)
+        if merge_result:
+            print(f"   🔍 合并预览完成")
+        else:
+            print(f"   ⚠️ 合并预览未返回结果")
+
+        tracker.finish("分支分叉分析完成")
 
         return {
             "merge_base": merge_base,
@@ -52,33 +72,47 @@ class FilePlanManager:
 
     def create_file_merge_plan(self, source_branch, target_branch):
         """创建文件级智能合并计划"""
-        print(f"📋 正在创建文件级智能合并计划...")
+        steps = ["获取变更文件列表", "创建集成分支", "生成文件级计划", "分析文件分布"]
+        tracker = ProgressTracker(len(steps), "创建合并计划")
 
-        # 获取所有变更文件
+        # 步骤 1: 获取所有变更文件
+        tracker.step("获取变更文件列表")
         changed_files = self.git_ops.get_changed_files(source_branch, target_branch)
         if not changed_files:
-            print("⚠️ 没有发现文件差异")
+            print("   ⚠️ 没有发现文件差异")
             return None
 
-        print(f"🔍 发现 {len(changed_files)} 个变更文件，开始创建文件级计划...")
+        print(f"   📁 发现 {len(changed_files)} 个变更文件")
 
-        # 创建集成分支
+        # 步骤 2: 创建集成分支
+        tracker.step("创建集成分支")
         integration_branch = self.git_ops.create_integration_branch(
             source_branch, target_branch
         )
         if not integration_branch:
+            print("   ❌ 集成分支创建失败")
             return None
+        print(f"   ✅ 集成分支: {integration_branch}")
 
-        # 创建文件级计划
-        file_plan = self.file_manager.create_file_plan(
-            source_branch, target_branch, integration_branch, changed_files
-        )
+        # 步骤 3: 创建文件级计划
+        tracker.step("生成文件级计划")
+        progress_indicator = ProgressIndicator(f"分析 {len(changed_files)} 个文件")
+        progress_indicator.start()
 
-        print(f"✅ 文件级合并计划创建完成")
-        print(f"📁 总计 {len(changed_files)} 个文件需要处理")
+        try:
+            file_plan = self.file_manager.create_file_plan(
+                source_branch, target_branch, integration_branch, changed_files
+            )
+            progress_indicator.stop("文件分析完成")
+        except Exception as e:
+            progress_indicator.stop(error_message=f"文件分析失败: {str(e)}")
+            raise
 
-        # 分析文件分布
+        # 步骤 4: 分析文件分布
+        tracker.step("分析文件分布")
         self._analyze_file_distribution(file_plan)
+
+        tracker.finish(f"合并计划创建完成，包含 {len(changed_files)} 个文件")
 
         return file_plan
 

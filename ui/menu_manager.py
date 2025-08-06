@@ -4,6 +4,7 @@ Git Merge Orchestrator - 优化的菜单管理器
 """
 
 from ui.display_helper import DisplayHelper
+from utils.progress_indicator import ProgressTracker
 from typing import Optional, Callable, Dict, Any
 
 
@@ -192,35 +193,91 @@ class MenuManager:
 
     def _execute_full_workflow(self):
         """执行完整工作流程"""
-        print("\n🚀 开始全流程引导模式...")
+        workflow_steps = ["分析分支分叉", "创建智能合并计划", "智能自动分配任务", "准备执行合并"]
 
-        # 1. 分析分支分叉
-        print("\n📍 步骤 1/4: 分析分支分叉")
-        if not self.orchestrator.analyze_divergence():
-            DisplayHelper.print_error("分支分叉分析失败，请检查分支状态")
-            return
+        tracker = ProgressTracker(len(workflow_steps), "全流程引导")
 
-        # 2. 创建合并计划
-        print("\n📍 步骤 2/4: 创建智能合并计划")
-        if not self.orchestrator.create_merge_plan():
-            DisplayHelper.print_error("合并计划创建失败")
-            return
+        print(f"\n🚀 启动全流程引导模式")
+        print(f"📋 处理模式: {self.orchestrator.processing_mode}")
+        print(f"🌿 源分支: {self.orchestrator.source_branch}")
+        print(f"🎯 目标分支: {self.orchestrator.target_branch}")
 
-        # 3. 自动分配任务
-        print("\n📍 步骤 3/4: 智能自动分配任务")
-        if not self.orchestrator.auto_assign_tasks():
-            DisplayHelper.print_error("任务分配失败")
-            return
+        try:
+            # 步骤 1: 分析分支分叉
+            tracker.step("分析分支分叉")
+            result = self.orchestrator.analyze_divergence()
+            if not result:
+                DisplayHelper.print_error("分支分叉分析失败，请检查分支状态")
+                return
+            print(f"   ✅ 分支分叉分析完成")
 
-        # 4. 显示下一步指导
-        print("\n📍 步骤 4/4: 准备执行合并")
-        print("✅ 全流程设置完成！")
-        print("\n🎯 下一步操作:")
-        print("1. 查看任务分配结果：主菜单 → 3. 任务分配 → d. 搜索负责人任务")
-        print("2. 开始合并操作：主菜单 → 4. 执行合并")
-        print("3. 查看详细状态：主菜单 → 2. 项目管理 → c. 检查项目状态")
+            # 步骤 2: 创建合并计划
+            tracker.step("创建智能合并计划")
+            plan = self.orchestrator.create_merge_plan()
+            if not plan:
+                DisplayHelper.print_error("合并计划创建失败")
+                return
+
+            # 显示计划摘要
+            if self.orchestrator.processing_mode == "file_level":
+                file_count = len(plan.get("files", []))
+                print(f"   ✅ 文件级合并计划创建完成，包含 {file_count} 个文件")
+            else:
+                group_count = len(plan.get("groups", []))
+                print(f"   ✅ 组级合并计划创建完成，包含 {group_count} 个分组")
+
+            # 步骤 3: 自动分配任务
+            tracker.step("智能自动分配任务")
+            assignment_result = self.orchestrator.auto_assign_tasks()
+            if not assignment_result:
+                DisplayHelper.print_error("任务分配失败")
+                return
+            print(f"   ✅ 任务分配完成")
+
+            # 步骤 4: 显示下一步指导
+            tracker.step("准备执行合并")
+            self._show_completion_guidance(assignment_result, plan)
+
+            tracker.finish("全流程引导完成，系统已准备就绪")
+
+        except Exception as e:
+            DisplayHelper.print_error(f"全流程执行出错: {str(e)}")
+            print("\n🔧 建议检查:")
+            print("1. 确保分支存在且可访问")
+            print("2. 检查仓库状态是否正常")
+            print("3. 验证网络连接")
 
         input("\n按回车键继续...")
+
+    def _show_completion_guidance(self, assignment_result, plan):
+        """显示完成后的指导信息"""
+        print(f"\n🎉 全流程设置完成！")
+
+        # 显示完成摘要
+        if assignment_result:
+            assigned_count = assignment_result.get("assigned_count", 0)
+            print(f"📊 分配摘要: {assigned_count} 个任务已分配")
+
+            # 显示工作负载分布（前5位）
+            workload = assignment_result.get("workload_distribution", {})
+            if workload:
+                print(f"👥 主要负责人:")
+                sorted_workload = sorted(
+                    workload.items(), key=lambda x: x[1], reverse=True
+                )
+                for i, (assignee, count) in enumerate(sorted_workload[:5]):
+                    print(f"   {i+1}. {assignee}: {count} 个任务")
+
+        print(f"\n🎯 下一步操作建议:")
+        print("1. 📋 查看分配结果: 主菜单 → 3. 任务分配 → d. 搜索负责人任务")
+        print("2. 🚀 开始合并: 主菜单 → 4. 执行合并")
+        print("3. 📊 查看状态: 主菜单 → 2. 项目管理 → c. 检查项目状态")
+        print("4. 🔍 高级查询: 主菜单 → 6. 高级功能 → a. 多维度查询系统")
+
+        print(f"\n💡 温馨提示:")
+        print("- 合并前建议先预览分配结果")
+        print("- 可以根据需要调整任务分配")
+        print("- 支持分批次执行合并操作")
 
     def _continue_existing_project(self):
         """继续现有项目"""

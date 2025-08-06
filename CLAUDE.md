@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+@/home/howie/.claude/customize/CLAUDE.md
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Development Commands
@@ -79,15 +81,15 @@ This is a Git merge orchestration tool built with a **DRY (Don't Repeat Yourself
   - **Enhanced**: `git_operations.py` with file-level branch creation methods
   - **Enhanced**: Merge executors with file-level script generation
   - **New**: `query_system.py` for advanced file searching
-  
-- **UI Components**: `ui/` handles display formatting and hierarchical menus  
+
+- **UI Components**: `ui/` handles display formatting and hierarchical menus
   - **Enhanced**: `display_helper.py` with file-level display methods
   - **Enhanced**: `menu_manager.py` with dual-mode support
-  
+
 - **Utilities**: `utils/` provides configuration, file operations, performance monitoring
   - **New**: `ignore_manager.py` for file filtering
   - **Enhanced**: `file_helper.py` with file-level plan management
-  
+
 - **Entry Points**: `main.py` (enhanced config support), `git_merge_orchestrator.py` (main controller)
 
 ### File Processing System
@@ -114,7 +116,7 @@ This is a Git merge orchestration tool built with a **DRY (Don't Repeat Yourself
 
 Comprehensive test suite organized into 7 categories:
 - Configuration, Deployment, Performance, Merge Strategies, Integration, Error Handling
-- Success rate targets: 95%+ (excellent), 80-94% (good)  
+- Success rate targets: 95%+ (excellent), 80-94% (good)
 - Performance targets: <10s (excellent), 10-30s (good)
 - **New**: File-level processing mode testing coverage
 
@@ -182,7 +184,7 @@ Code should support both processing modes:
     {
       "path": "src/example.py",
       "assignee": "developer",
-      "status": "assigned", 
+      "status": "assigned",
       "priority": "normal",
       "assignment_reason": "主要贡献者",
       "contributors": {...}

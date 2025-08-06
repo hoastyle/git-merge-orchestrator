@@ -6,6 +6,7 @@ Git Merge Orchestrator - 文件级任务分配器
 from datetime import datetime, timedelta
 from collections import defaultdict
 import json
+from utils.progress_indicator import ProgressTracker, ProgressIndicator
 
 
 class FileTaskAssigner:
@@ -24,14 +25,21 @@ class FileTaskAssigner:
             print("❌ 文件级计划不存在，请先创建合并计划")
             return None
 
-        print(f"🚀 开始智能文件级任务分配...")
-        print(f"📊 总文件数: {len(file_plan['files'])}")
+        total_files = len(file_plan["files"])
 
+        steps = ["获取活跃贡献者", "分析文件贡献度", "智能分配文件", "保存分配结果"]
+        tracker = ProgressTracker(len(steps), "文件任务分配")
+
+        # 步骤 1: 获取活跃贡献者
+        tracker.step("获取活跃贡献者")
         exclude_authors = exclude_authors or []
         active_contributors = self.contributor_analyzer.get_active_contributors(3)
 
-        print(f"🎯 活跃贡献者: {len(active_contributors)} 位")
-        print(f"🚫 手动排除: {len(exclude_authors)} 位")
+        print(f"   🎯 活跃贡献者: {len(active_contributors)} 位")
+        print(f"   🚫 手动排除: {len(exclude_authors)} 位")
+
+        # 步骤 2: 分析文件贡献度
+        tracker.step(f"分析文件贡献度")
 
         # 统计变量
         assignment_stats = {
@@ -44,59 +52,78 @@ class FileTaskAssigner:
         workload_counter = defaultdict(int)
         assignments = []
 
-        # 处理每个文件
-        for file_info in file_plan["files"]:
-            if file_info.get("assignee"):  # 已分配的跳过
-                continue
+        # 使用进度指示器处理文件分析
+        progress_indicator = ProgressIndicator(f"分析 {total_files} 个文件的贡献度")
+        progress_indicator.start()
 
-            file_path = file_info["path"]
-            directory = file_info["directory"]
+        try:
+            unassigned_files = [f for f in file_plan["files"] if not f.get("assignee")]
 
-            # 分析文件贡献者
-            file_contributors = self._analyze_file_contributors(file_path)
-            file_info["contributors"] = file_contributors
+            # 步骤 3: 智能分配文件
+            tracker.step(f"智能分配 {len(unassigned_files)} 个文件")
 
-            # 尝试直接分配
-            assignee, reason = self._assign_file_to_best_contributor(
-                file_contributors,
-                active_contributors,
-                exclude_authors,
-                workload_counter,
-                max_tasks_per_person,
-            )
+            for i, file_info in enumerate(unassigned_files):
+                file_path = file_info["path"]
+                directory = file_info["directory"]
 
-            if assignee:
-                assignment_stats["direct_assignment"] += 1
-            elif include_fallback:
-                # 尝试目录级回退分配
-                assignee, reason = self._assign_file_by_directory_fallback(
-                    directory,
+                # 分析文件贡献者
+                file_contributors = self._analyze_file_contributors(file_path)
+                file_info["contributors"] = file_contributors
+
+                # 尝试直接分配
+                assignee, reason = self._assign_file_to_best_contributor(
+                    file_contributors,
                     active_contributors,
                     exclude_authors,
                     workload_counter,
                     max_tasks_per_person,
                 )
+
                 if assignee:
-                    assignment_stats["directory_fallback"] += 1
-                    reason = f"[目录回退] {reason}"
+                    assignment_stats["direct_assignment"] += 1
+                elif include_fallback:
+                    # 尝试目录级回退分配
+                    assignee, reason = self._assign_file_by_directory_fallback(
+                        directory,
+                        active_contributors,
+                        exclude_authors,
+                        workload_counter,
+                        max_tasks_per_person,
+                    )
+                    if assignee:
+                        assignment_stats["directory_fallback"] += 1
+                        reason = f"[目录回退] {reason}"
 
-            if assignee:
-                workload_counter[assignee] += 1
-                assignments.append(
-                    {"file_path": file_path, "assignee": assignee, "reason": reason}
-                )
-            else:
-                assignment_stats["unassigned"] += 1
+                if assignee:
+                    workload_counter[assignee] += 1
+                    assignments.append(
+                        {"file_path": file_path, "assignee": assignee, "reason": reason}
+                    )
+                else:
+                    assignment_stats["unassigned"] += 1
 
-        # 批量分配文件
+                # 每处理50个文件显示一次进度
+                if (i + 1) % 50 == 0 or (i + 1) == len(unassigned_files):
+                    progress_indicator.update_message(
+                        f"已分析 {i + 1}/{len(unassigned_files)} 个文件"
+                    )
+
+            progress_indicator.stop(f"文件分析完成")
+        except Exception as e:
+            progress_indicator.stop(error_message=f"文件分析失败: {str(e)}")
+            raise
+
+        # 步骤 4: 批量分配文件
+        tracker.step("保存分配结果")
         assigned_count = self.file_manager.batch_assign_files(assignments)
 
+        tracker.finish(f"文件任务分配完成，成功分配 {assigned_count} 个文件")
+
         # 显示分配结果
-        print(f"\n📊 文件级分配完成:")
-        print(f"✅ 直接分配: {assignment_stats['direct_assignment']} 个文件")
-        print(f"🔄 目录回退: {assignment_stats['directory_fallback']} 个文件")
-        print(f"⚠️ 未分配: {assignment_stats['unassigned']} 个文件")
-        print(f"📝 总分配: {assigned_count} 个文件")
+        print(f"\n📊 分配结果详情:")
+        print(f"   ✅ 直接分配: {assignment_stats['direct_assignment']} 个文件")
+        print(f"   🔄 目录回退: {assignment_stats['directory_fallback']} 个文件")
+        print(f"   ⚠️ 未分配: {assignment_stats['unassigned']} 个文件")
 
         # 显示工作负载分布
         print(f"\n👥 工作负载分布:")
@@ -104,10 +131,10 @@ class FileTaskAssigner:
             workload_counter.items(), key=lambda x: x[1], reverse=True
         )
         for assignee, count in sorted_workload[:10]:  # 显示前10位
-            print(f"  {assignee}: {count} 个文件")
+            print(f"   {assignee}: {count} 个文件")
 
         if len(sorted_workload) > 10:
-            print(f"  ... 还有 {len(sorted_workload) - 10} 位贡献者")
+            print(f"   ... 还有 {len(sorted_workload) - 10} 位贡献者")
 
         return {
             "assigned_count": assigned_count,

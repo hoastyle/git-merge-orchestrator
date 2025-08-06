@@ -235,11 +235,40 @@ class IgnoreManager:
     def _match_glob(self, path: str) -> bool:
         """Glob模式匹配"""
         for pattern in self.compiled_patterns["glob"]:
+            # 直接匹配文件路径
             if fnmatch.fnmatch(path, pattern):
                 return True
-            # 同时检查目录匹配
-            if fnmatch.fnmatch(os.path.dirname(path) + "/", pattern):
-                return True
+
+            # 对于目录模式（以/结尾），检查路径是否在该目录下
+            if pattern.endswith("/"):
+                pattern_without_slash = pattern.rstrip("/")
+
+                # 检查路径是否直接以该目录开头（完全匹配目录）
+                if path.startswith(pattern_without_slash + "/"):
+                    return True
+
+                # 检查路径的任何部分是否包含匹配的目录
+                path_parts = path.split("/")
+                for i in range(len(path_parts)):
+                    # 检查每个目录部分是否匹配
+                    dir_part = path_parts[i]
+                    if dir_part == pattern_without_slash:
+                        return True
+                    # 也支持通配符匹配
+                    if fnmatch.fnmatch(dir_part, pattern_without_slash):
+                        return True
+
+                    # 检查从当前位置到文件的完整路径是否匹配
+                    if i < len(path_parts) - 1:  # 不包括最后的文件名
+                        partial_path = "/".join(path_parts[i : i + 1])
+                        if partial_path == pattern_without_slash:
+                            return True
+            else:
+                # 对于非目录模式，检查目录匹配（向后兼容）
+                dir_path = os.path.dirname(path)
+                if dir_path and fnmatch.fnmatch(dir_path + "/", pattern + "/"):
+                    return True
+
         return False
 
     def _match_regex(self, path: str) -> bool:
