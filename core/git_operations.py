@@ -293,7 +293,7 @@ class GitOperations:
                 one_year_ago = (datetime.now() - timedelta(days=365)).strftime(
                     "%Y-%m-%d"
                 )
-                recent_cmd = f'git log --follow --since="{one_year_ago}" --format="%an" -- "{directory_path}"'
+                recent_cmd = f'git log --since="{one_year_ago}" --format="%an" -- "{directory_path}"'
                 recent_result = self.run_command(recent_cmd)
 
                 if recent_result:
@@ -313,7 +313,7 @@ class GitOperations:
                         }
 
             # 获取总体贡献统计
-            cmd = f'git log --follow --format="%an" -- "{directory_path}"'
+            cmd = f'git log --format="%an" -- "{directory_path}"'
             total_result = self.run_command(cmd)
 
             if total_result:

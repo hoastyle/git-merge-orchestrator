@@ -10,7 +10,12 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from config import SCORING_WEIGHTS, DEFAULT_ANALYSIS_MONTHS, DEFAULT_ACTIVE_MONTHS
+from config import (
+    SCORING_WEIGHTS,
+    DEFAULT_ANALYSIS_MONTHS,
+    DEFAULT_ACTIVE_MONTHS,
+    ENABLE_PERFORMANCE_MONITORING,
+)
 from utils.performance_monitor import (
     performance_monitor,
     timing_context,
@@ -133,16 +138,38 @@ class OptimizedContributorAnalyzer:
             else 0
         )
 
-        print(f"📊 文件分类完成 ({classification_time:.3f}s):")
+        print(f"📊 智能文件分类完成 ({classification_time:.3f}s):")
         print(
             f"   🎯 关键文件: {len(critical_files)} 个 ({critical_ratio:.1f}%) - 使用深度分析（--follow）"
         )
         print(f"   📋 普通文件: {len(regular_files)} 个 ({100-critical_ratio:.1f}%) - 使用批量分析")
 
-        if critical_ratio > 20:  # 如果超过20%的文件使用深度分析，给出性能警告
+        # 显示优化详情
+        if critical_files:
+            print(f"   📝 关键文件类型分析:")
+            cpp_files = [
+                f for f in critical_files if f.endswith((".cpp", ".h", ".hpp", ".c"))
+            ]
+            config_files = [
+                f
+                for f in critical_files
+                if f.endswith((".json", ".yml", ".yaml", ".txt"))
+            ]
+            root_files = [f for f in critical_files if "/" not in f]
+
+            if cpp_files:
+                print(f"      • C++核心文件: {len(cpp_files)} 个")
+            if config_files:
+                print(f"      • 配置文件: {len(config_files)} 个")
+            if root_files:
+                print(f"      • 根目录文件: {len(root_files)} 个")
+
+        if critical_ratio > 20:
             print(f"⚠️  性能警告：{critical_ratio:.1f}%的文件将使用深度分析，可能影响性能")
+        elif critical_ratio > 10:
+            print(f"💡 性能提示：{critical_ratio:.1f}%的文件使用深度分析，性能中等")
         else:
-            print(f"✅ 性能优化：仅{critical_ratio:.1f}%的文件使用深度分析，性能良好")
+            print(f"✅ 性能优秀：仅{critical_ratio:.1f}%的文件使用深度分析，预期快速完成")
 
         # 对关键文件使用深度分析
         if critical_files:
@@ -186,8 +213,23 @@ class OptimizedContributorAnalyzer:
         elapsed = (datetime.now() - start_time).total_seconds()
         print(f"⚡ 批量分析完成，用时 {elapsed:.2f} 秒")
         print(
-            f"📊 处理: 总计{len(file_list)}, 缓存{len(cached_files)}, 深度分析{len(critical_files)}, 批量分析{len(regular_files)}"
+            f"📊 处理统计: 总计{len(file_list)}, 缓存{len(cached_files)}, 深度分析{len(critical_files)}, 批量分析{len(regular_files)}"
         )
+
+        # 性能监控报告 - 如果启用了性能监控
+        if ENABLE_PERFORMANCE_MONITORING:
+            analysis_stats = {
+                "total_time": elapsed,
+                "batch_time": batch_analysis_time if regular_files else 0,
+                "single_time": deep_analysis_time if critical_files else 0,
+                "total_files": len(file_list),
+                "batch_files": len(regular_files),
+                "single_files": len(critical_files),
+                "critical_ratio": len(critical_files) / max(len(file_list), 1) * 100,
+                "follow_usage": len(critical_files) / max(len(file_list), 1) * 100,
+            }
+            performance_report = self._generate_performance_report(analysis_stats)
+            print("\n" + performance_report)
 
         # 保存缓存
         self.save_persistent_cache()
@@ -207,7 +249,8 @@ class OptimizedContributorAnalyzer:
             is_critical = False
 
             # 1. 只有极少数核心文件才需要深度分析
-            core_patterns = [
+            # Python/JavaScript核心文件
+            python_js_patterns = [
                 "main.py",
                 "index.js",
                 "index.ts",
@@ -220,13 +263,42 @@ class OptimizedContributorAnalyzer:
                 "asgi.py",
             ]
 
+            # C++核心文件
+            cpp_patterns = [
+                "main.cpp",
+                "main.c",
+                "main.h",
+                "main.hpp",
+                "app.cpp",
+                "application.cpp",
+                "core.cpp",
+                "core.h",
+                "engine.cpp",
+                "engine.h",
+                "manager.cpp",
+                "manager.h",
+            ]
+
+            # 其他核心文件
+            other_patterns = [
+                "CMakeLists.txt",
+                "Makefile",
+                "configure",
+                "config.h",
+                "package.json",
+                "pom.xml",
+                "build.gradle",
+            ]
+
+            all_core_patterns = python_js_patterns + cpp_patterns + other_patterns
+
             file_name = file_path.split("/")[-1]
-            if file_name in core_patterns:
+            if file_name in all_core_patterns:
                 is_critical = True
 
             # 2. 根目录的重要配置文件
             elif "/" not in file_path and file_path.endswith(
-                (".py", ".js", ".ts", ".json", ".yml", ".yaml")
+                (".py", ".js", ".ts", ".json", ".yml", ".yaml", ".cpp", ".h", ".hpp")
             ):
                 is_critical = True
 
@@ -237,8 +309,12 @@ class OptimizedContributorAnalyzer:
             ):
                 is_critical = True
 
-            # 4. 检查是否可能有重命名历史（基于文件大小和路径深度）
-            elif self._should_check_rename_history(file_path):
+            # 4. 数据文件和二进制文件永远不需要深度分析
+            elif self._is_data_or_binary_file(file_path):
+                is_critical = False  # 明确标记为非关键文件
+
+            # 5. 检查是否可能有重命名历史（更严格的条件）
+            elif self._should_check_rename_history_strict(file_path):
                 is_critical = True
 
             if is_critical:
@@ -264,6 +340,138 @@ class OptimizedContributorAnalyzer:
             )
 
         return critical_files, regular_files
+
+    def _is_data_or_binary_file(self, file_path):
+        """检查是否为数据文件或二进制文件，这些文件通常不需要--follow分析"""
+        data_extensions = [
+            # 数据文件
+            ".pcd",
+            ".ply",
+            ".las",
+            ".laz",  # 点云数据
+            ".bag",
+            ".rosbag",  # ROS数据
+            ".csv",
+            ".xlsx",
+            ".xls",
+            ".db",
+            ".sqlite",  # 表格数据
+            ".json",
+            ".xml",
+            ".yaml",
+            ".yml",  # 配置数据（但不在根目录）
+            # 媒体文件
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".gif",
+            ".bmp",
+            ".svg",  # 图片
+            ".mp4",
+            ".avi",
+            ".mkv",
+            ".mov",  # 视频
+            ".mp3",
+            ".wav",
+            ".ogg",  # 音频
+            # 二进制文件
+            ".so",
+            ".dll",
+            ".dylib",  # 库文件
+            ".exe",
+            ".bin",
+            ".out",  # 可执行文件
+            ".zip",
+            ".tar",
+            ".gz",
+            ".7z",
+            ".rar",  # 压缩文件
+            ".pdf",
+            ".doc",
+            ".docx",  # 文档文件
+            # 缓存和临时文件
+            ".cache",
+            ".tmp",
+            ".temp",
+            ".log",
+            ".pyc",
+            ".pyo",
+            ".class",  # 编译文件
+        ]
+
+        file_lower = file_path.lower()
+
+        # 特殊处理：根目录的配置文件不应该被视为数据文件
+        if "/" not in file_path and file_path.lower().endswith(
+            (".json", ".yaml", ".yml", ".xml")
+        ):
+            return False
+
+        # 检查文件扩展名
+        if any(file_lower.endswith(ext) for ext in data_extensions):
+            return True
+
+        # 检查是否在数据目录中
+        data_dirs = [
+            "data/",
+            "dataset/",
+            "assets/",
+            "resources/",
+            "media/",
+            "cache/",
+            "tmp/",
+        ]
+        if any(data_dir in file_path.lower() for data_dir in data_dirs):
+            return True
+
+        return False
+
+    def _should_check_rename_history_strict(self, file_path):
+        """更严格的重命名历史检查，减少误判"""
+        try:
+            # 只有真正可能被重命名的文件才需要--follow
+            refactor_indicators = [
+                "legacy",
+                "old",
+                "deprecated",
+                "migration",
+                "refactor",
+                "v1",
+                "v2",
+                "v3",
+                "backup",
+                "temp",
+                "new",
+                "tmp",
+            ]
+
+            path_lower = file_path.lower()
+            # 检查文件名或目录名中是否有重构标识
+            path_parts = path_lower.split("/")
+            for part in path_parts:
+                if any(indicator in part for indicator in refactor_indicators):
+                    return True
+
+            # 大幅降低深度阈值 - 只有极深的目录才可能有移动历史
+            depth = file_path.count("/")
+            if depth >= 6:  # 从4提高到6，减少误判
+                # 但排除明显的数据目录
+                if any(
+                    data_dir in path_lower
+                    for data_dir in [
+                        "data/",
+                        "dataset/",
+                        "test/",
+                        "tests/",
+                        "examples/",
+                    ]
+                ):
+                    return False
+                return True
+
+            return False
+        except:
+            return False
 
     def _should_check_rename_history(self, file_path):
         """判断文件是否可能有重命名历史，需要使用--follow"""
@@ -456,49 +664,144 @@ class OptimizedContributorAnalyzer:
         return batch_results
 
     def _get_batch_contributors(self, file_list, since_date=None):
-        """获取批量文件的贡献者信息 - 使用优化的Git操作"""
-        # 直接使用git_operations中的批量方法
-        try:
-            batch_results = self.git_ops.get_contributors_batch(file_list, since_date)
-            return batch_results
-        except Exception as e:
-            print(f"⚠️ 批量处理失败，回退到传统方法: {str(e)}")
-            return self._get_batch_contributors_fallback(file_list, since_date)
+        """获取批量文件的贡献者信息 - 增强的错误处理和重试机制"""
+        max_retries = 2
+
+        for attempt in range(max_retries + 1):
+            try:
+                # 尝试使用git_operations中的批量方法
+                batch_results = self.git_ops.get_contributors_batch(
+                    file_list, since_date
+                )
+
+                # 验证结果质量
+                if self._validate_batch_results(batch_results, file_list):
+                    if attempt > 0:
+                        print(f"   ✅ 重试成功 (第{attempt + 1}次尝试)")
+                    return batch_results
+                else:
+                    if attempt < max_retries:
+                        print(f"   ⚠️ 批量结果质量不佳，准备重试 (第{attempt + 1}次)")
+                        continue
+                    else:
+                        print(f"   ⚠️ 多次重试后结果仍不理想，使用fallback方法")
+
+            except Exception as e:
+                if attempt < max_retries:
+                    print(f"   ⚠️ 批量处理失败 (第{attempt + 1}次): {str(e)[:100]}...")
+                    print(f"   🔄 正在重试...")
+                    continue
+                else:
+                    print(f"   ❌ 批量处理多次失败，回退到传统方法: {str(e)[:100]}...")
+
+        # 所有尝试都失败了，使用fallback方法
+        return self._get_batch_contributors_fallback(file_list, since_date)
+
+    def _validate_batch_results(self, batch_results, file_list):
+        """验证批量分析结果的质量"""
+        if not batch_results:
+            return False
+
+        # 检查结果覆盖率
+        covered_files = len(
+            [f for f in file_list if f in batch_results and batch_results[f]]
+        )
+        coverage_rate = covered_files / len(file_list) if file_list else 0
+
+        # 至少应该覆盖30%的文件（考虑到有些文件可能没有提交历史）
+        return coverage_rate >= 0.3
 
     def _get_batch_contributors_fallback(self, file_list, since_date=None):
-        """批量贡献者获取的回退方法"""
+        """批量贡献者获取的回退方法 - 增强版"""
+        print(f"   📦 使用fallback方法分析 {len(file_list)} 个文件")
         contributors_by_file = defaultdict(lambda: defaultdict(int))
 
-        # 构建文件参数
-        files_arg = " ".join([f'"{f}"' for f in file_list])
+        # 如果文件太多，分批处理
+        batch_size = 200  # 减小批量大小，避免命令行过长
+        for i in range(0, len(file_list), batch_size):
+            batch_files = file_list[i : i + batch_size]
+            batch_contributors = self._process_file_batch_fallback(
+                batch_files, since_date
+            )
 
-        # 构建Git命令
-        if since_date:
-            cmd = f'git log --since="{since_date}" --format="COMMIT:%an" --name-only -- {files_arg}'
-        else:
-            cmd = f'git log --format="COMMIT:%an" --name-only -- {files_arg}'
-
-        result = self.git_ops.run_command(cmd)
-        if not result:
-            return dict(contributors_by_file)
-
-        # 解析输出
-        lines = result.strip().split("\n")
-        current_author = None
-
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-
-            if line.startswith("COMMIT:"):
-                # 提取作者名
-                current_author = line[7:]  # 去掉 'COMMIT:' 前缀
-            elif current_author and line in file_list:
-                # 这是一个文件名行，且是我们关注的文件
-                contributors_by_file[line][current_author] += 1
+            # 合并结果
+            for file_path, contributors in batch_contributors.items():
+                for author, count in contributors.items():
+                    contributors_by_file[file_path][author] += count
 
         return dict(contributors_by_file)
+
+    def _process_file_batch_fallback(self, file_list, since_date=None):
+        """处理单个批次的文件"""
+        contributors_by_file = defaultdict(lambda: defaultdict(int))
+
+        try:
+            # 构建文件参数，使用更安全的方式
+            files_arg = " ".join([f'"{f}"' for f in file_list])
+
+            # 构建Git命令
+            if since_date:
+                cmd = f'git log --since="{since_date}" --format="COMMIT:%an" --name-only -- {files_arg}'
+            else:
+                cmd = f'git log --format="COMMIT:%an" --name-only -- {files_arg}'
+
+            result = self.git_ops.run_command(cmd)
+            if not result:
+                return dict(contributors_by_file)
+
+            # 解析输出
+            lines = result.strip().split("\n")
+            current_author = None
+
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+
+                if line.startswith("COMMIT:"):
+                    # 提取作者名
+                    current_author = line[7:].strip()  # 去掉 'COMMIT:' 前缀并清理
+                elif current_author and line in file_list:
+                    # 这是一个文件名行，且是我们关注的文件
+                    contributors_by_file[line][current_author] += 1
+
+        except Exception as e:
+            print(f"   ⚠️ 批次处理出错: {str(e)[:50]}...")
+            # 如果批量也失败了，尝试单个文件分析
+            for file_path in file_list:
+                try:
+                    single_result = self._analyze_single_file_simple(
+                        file_path, since_date
+                    )
+                    if single_result:
+                        contributors_by_file[file_path] = single_result
+                except:
+                    # 单个文件也失败了，跳过
+                    continue
+
+        return dict(contributors_by_file)
+
+    def _analyze_single_file_simple(self, file_path, since_date=None):
+        """简单的单文件分析，不使用--follow"""
+        try:
+            if since_date:
+                cmd = f'git log --since="{since_date}" --format="%an" -- "{file_path}"'
+            else:
+                cmd = f'git log --format="%an" -- "{file_path}"'
+
+            result = self.git_ops.run_command(cmd)
+            if not result:
+                return {}
+
+            contributors = defaultdict(int)
+            for author in result.split("\n"):
+                author = author.strip()
+                if author:
+                    contributors[author] += 1
+
+            return dict(contributors)
+        except:
+            return {}
 
     def _get_file_cache_key(self, file_path):
         """生成文件缓存键 - 性能优化版本，避免额外Git调用"""
@@ -642,8 +945,10 @@ class OptimizedContributorAnalyzer:
         """分析单个目录的贡献者"""
         contributors = {}
 
-        # 获取一年内的贡献统计
-        recent_cmd = f'git log --follow --since="{one_year_ago}" --format="%an" -- "{directory_path}"'
+        # 获取一年内的贡献统计（目录分析通常不需要跟踪重命名）
+        recent_cmd = (
+            f'git log --since="{one_year_ago}" --format="%an" -- "{directory_path}"'
+        )
         recent_result = self.git_ops.run_command(recent_cmd)
 
         if recent_result:
@@ -662,8 +967,8 @@ class OptimizedContributorAnalyzer:
                     "score": count * 3,
                 }
 
-        # 获取总体贡献统计
-        cmd = f'git log --follow --format="%an" -- "{directory_path}"'
+        # 获取总体贡献统计（目录分析通常不需要跟踪重命名）
+        cmd = f'git log --format="%an" -- "{directory_path}"'
         total_result = self.git_ops.run_command(cmd)
 
         if total_result:
@@ -885,3 +1190,69 @@ class OptimizedContributorAnalyzer:
             reason_stats[reason_type].append(group)
 
         return reason_stats
+
+    def _generate_performance_report(self, analysis_stats):
+        """生成性能分析报告"""
+        if not analysis_stats:
+            return "⚠️ 无性能数据可用"
+
+        total_time = analysis_stats.get("total_time", 0)
+        batch_time = analysis_stats.get("batch_time", 0)
+        single_time = analysis_stats.get("single_time", 0)
+        total_files = analysis_stats.get("total_files", 0)
+        batch_files = analysis_stats.get("batch_files", 0)
+        single_files = analysis_stats.get("single_files", 0)
+        critical_ratio = analysis_stats.get("critical_ratio", 0)
+        follow_usage = analysis_stats.get("follow_usage", 0)
+
+        # 计算性能指标
+        avg_time_per_file = total_time / max(total_files, 1)
+        batch_efficiency = batch_time / max(batch_files, 1) if batch_files > 0 else 0
+        single_efficiency = (
+            single_time / max(single_files, 1) if single_files > 0 else 0
+        )
+
+        # 性能等级评估
+        if avg_time_per_file < 0.1:
+            perf_level = "🚀 优秀"
+        elif avg_time_per_file < 0.5:
+            perf_level = "✅ 良好"
+        elif avg_time_per_file < 1.0:
+            perf_level = "⚠️ 一般"
+        else:
+            perf_level = "❌ 需优化"
+
+        report = [
+            f"⚡ 性能分析报告:",
+            f"   • 总耗时: {total_time:.2f}秒",
+            f"   • 平均每文件: {avg_time_per_file:.3f}秒",
+            f"   • 性能等级: {perf_level}",
+            f"   • 关键文件比例: {critical_ratio:.1f}%",
+            f"   • --follow使用率: {follow_usage:.1f}%",
+            "",
+            f"📈 处理分析:",
+            f"   • 批量处理: {batch_files}个文件 ({batch_time:.2f}秒)",
+            f"   • 单独处理: {single_files}个文件 ({single_time:.2f}秒)",
+        ]
+
+        if batch_files > 0:
+            report.append(f"   • 批量效率: {batch_efficiency:.3f}秒/文件")
+        if single_files > 0:
+            report.append(f"   • 单独效率: {single_efficiency:.3f}秒/文件")
+
+        # 优化建议
+        suggestions = []
+        if critical_ratio > 15:
+            suggestions.append("建议：减少关键文件分类以提升批量处理效率")
+        if follow_usage > 20:
+            suggestions.append("建议：优化文件分类策略以减少--follow使用")
+        if avg_time_per_file > 0.5:
+            suggestions.append("建议：检查Git仓库大小和网络连接")
+
+        if suggestions:
+            report.append("")
+            report.append("💡 优化建议:")
+            for suggestion in suggestions:
+                report.append(f"   • {suggestion}")
+
+        return "\n".join(report)
