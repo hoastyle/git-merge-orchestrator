@@ -64,11 +64,32 @@ class FileTaskAssigner:
         batch_time = (datetime.now() - batch_start).total_seconds()
         print(f"✅ [PERF] 批量分析完成: {batch_time:.3f}s ({batch_time/len(file_paths)*1000:.1f}ms/文件)")
         
-        # 将批量分析结果分配给文件信息
+        # 将批量分析结果分配给文件信息，并转换格式
+        print(f"🔄 [PERF] 转换数据格式以兼容任务分配...")
+        format_start = datetime.now()
+        
         for file_info in unassigned_files:
             file_path = file_info["path"]
-            file_contributors = batch_contributors.get(file_path, {})
+            raw_contributors = batch_contributors.get(file_path, {})
+            
+            # 转换数据格式：{author: count} -> {author: {"score": count, ...}}
+            file_contributors = {}
+            for author, count in raw_contributors.items():
+                if isinstance(count, dict):
+                    # 已经是正确格式（包含score等字段）
+                    file_contributors[author] = count
+                else:
+                    # 需要转换格式：简单数字 -> 完整字典
+                    file_contributors[author] = {
+                        "recent_commits": count,
+                        "total_commits": count,
+                        "score": count
+                    }
+            
             file_info["contributors"] = file_contributors
+        
+        format_time = (datetime.now() - format_start).total_seconds()
+        print(f"✅ [PERF] 数据格式转换完成: {format_time:.3f}s")
 
         # 统计变量
         assignment_stats = {
@@ -179,6 +200,7 @@ class FileTaskAssigner:
         self._save_performance_log(total_files, total_time, {
             'get_contributors': step1_time,
             'batch_analysis': batch_time,
+            'format_conversion': format_time,
             'file_assignment': step3_time,
             'save_results': step4_time,
             'mode': 'file_task_assigner'
