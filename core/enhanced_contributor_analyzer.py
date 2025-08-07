@@ -118,15 +118,22 @@ class EnhancedContributorAnalyzer:
             
             print(f"🧪 开始后处理: {file_count} 个文件...")
             
+            # 优化: 一次性获取活跃贡献者列表（避免N+1查询问题）
+            active_contributors_start = datetime.now()
+            active_months = self.config.get("active_months", DEFAULT_ACTIVE_MONTHS)
+            active_contributors_set = set(self.git_ops.get_active_contributors(active_months))
+            active_contributors_time = (datetime.now() - active_contributors_start).total_seconds()
+            print(f"⚡ 获取活跃贡献者列表: {active_contributors_time:.2f}s ({len(active_contributors_set)} 人)")
+            
             # 详细的后处理统计
-            filtering_time = 0
+            filtering_time = active_contributors_time  # 包含一次性获取时间
             scoring_time = 0
             normalization_time = 0
             
             for i, (file_path, contributors) in enumerate(batch_contributors.items(), 1):
-                # 应用活跃度过滤
+                # 应用活跃度过滤 - 使用预获取的活跃贡献者列表
                 filter_start = datetime.now()
-                active_contributors = self._filter_active_contributors(contributors)
+                active_contributors = self._filter_active_contributors_optimized(contributors, active_contributors_set)
                 filtering_time += (datetime.now() - filter_start).total_seconds()
 
                 # 应用分数阈值过滤
@@ -611,3 +618,26 @@ class EnhancedContributorAnalyzer:
             insights.append("分析性能表现良好")
             
         return insights
+        
+    def _filter_active_contributors_optimized(self, contributors_dict, active_contributors_set):
+        """优化版活跃度过滤 - 使用预获取的活跃贡献者集合"""
+        if not contributors_dict:
+            return {}
+
+        # 如果没有活跃贡献者，返回原始数据
+        if not active_contributors_set:
+            return contributors_dict
+
+        # 使用预获取的集合进行快速过滤
+        filtered = {}
+        for author, info in contributors_dict.items():
+            if author in active_contributors_set:
+                info["is_active"] = True
+                filtered[author] = info
+            else:
+                # 标记为不活跃但保留数据
+                info["is_active"] = False
+                if self.config.get("include_inactive", False):
+                    filtered[author] = info
+
+        return filtered
