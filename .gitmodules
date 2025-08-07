@@ -1,3 +1,4 @@
 [submodule "test-environment"]
 	path = test-environment
 	url = git@github.com:hoastyle/git-merge-orchestrator-test-env.git
+	branch = master
