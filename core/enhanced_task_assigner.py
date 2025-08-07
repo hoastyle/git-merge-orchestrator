@@ -170,6 +170,8 @@ class EnhancedTaskAssigner:
         print(f"✅ 增强贡献者分析完成: {analysis_time:.2f}s ({analysis_time/len(file_paths)*1000:.1f}ms/文件)")
 
         # 执行文件分配
+        assignment_start = datetime.now()
+        print(f"👥 开始文件分配逐钀...")
         success_count = 0
         failed_count = 0
         assignment_stats = {
@@ -242,12 +244,41 @@ class EnhancedTaskAssigner:
             assignment_stats["assignment_reasons"][file_path] = reason
             success_count += 1
 
-        # 分配完成统计
+        # 分配完成统计和性能记录
         elapsed = (datetime.now() - start_time).total_seconds()
+        assignment_time = (datetime.now() - assignment_start).total_seconds()
+        
+        # 构建性能记录
+        perf_log = {
+            'analysis_phase': analysis_time,
+            'assignment_phase': assignment_time,
+            'total_execution_time': elapsed,
+            'files_processed': len([f for f in files if not f.get("assignee", "").strip()]),
+            'success_count': success_count,
+            'failed_count': failed_count,
+            'contributors_count': len(person_task_count),
+            'avg_time_per_file_ms': (assignment_time / max(success_count + failed_count, 1)) * 1000
+        }
+        
+        # 保存性能日志
+        self._save_enhanced_performance_log(perf_log)
 
         print(f"\n✅ 增强任务分配完成!")
         print(f"📊 分配统计: 成功 {success_count}, 失败 {failed_count}, 用时 {elapsed:.2f}s")
         print(f"👥 涉及 {len(person_task_count)} 位贡献者")
+        
+        # 性能分析提示 - 帮助用户理解那个28秒
+        if elapsed > 20:
+            print(f"\n🔍 性能分析 (总时间 {elapsed:.1f}s):")
+            print(f"  🧪 分析阶段: {analysis_time:.1f}s")
+            print(f"  👥 分配阶段: {assignment_time:.1f}s")
+            print(f"  📦 其他处理: {elapsed - analysis_time - assignment_time:.1f}s")
+            
+            # 性能建议
+            if assignment_time > analysis_time * 1.5:
+                print(f"  💡 建议: 分配逻辑耗时较多，可考虑优化算法")
+            if elapsed - analysis_time - assignment_time > 5:
+                print(f"  💡 建议: 其他处理耗时较多，检查I/O操作或缓存")
 
         # 显示负载分布
         self._show_workload_distribution(person_task_count)
@@ -564,3 +595,91 @@ class EnhancedTaskAssigner:
         report["contributors_involved"] = len(report["contributors_involved"])
 
         return report
+        
+    def _save_enhanced_performance_log(self, perf_log):
+        """保存增强任务分配器的详细性能日志"""
+        try:
+            import json
+            from pathlib import Path
+            from datetime import datetime
+            
+            # 设置日志文件路径
+            if hasattr(self.git_ops, 'repo_path'):
+                repo_path = Path(self.git_ops.repo_path)
+            else:
+                repo_path = Path(".")
+                
+            log_file = repo_path / ".merge_work" / "enhanced_performance_log.json"
+            log_file.parent.mkdir(exist_ok=True)
+            
+            # 构建日志条目
+            log_entry = {
+                'timestamp': datetime.now().isoformat(),
+                'component': 'EnhancedTaskAssigner',
+                'version': '2.3',
+                'performance_breakdown': perf_log,
+                'summary': {
+                    'total_time': perf_log.get('total_execution_time', 0),
+                    'analysis_time': perf_log.get('analysis_phase', 0),
+                    'assignment_time': perf_log.get('total_assignment_loop_time', 0),
+                    'files_processed': perf_log.get('files_processed', 0),
+                    'success_rate': perf_log.get('success_count', 0) / max(perf_log.get('files_processed', 1), 1) * 100,
+                    'avg_time_per_file_ms': perf_log.get('avg_time_per_file_ms', 0)
+                },
+                'performance_insights': self._generate_performance_insights(perf_log)
+            }
+            
+            # 加载现有日志
+            logs = []
+            if log_file.exists():
+                try:
+                    with open(log_file, 'r', encoding='utf-8') as f:
+                        logs = json.load(f)
+                except:
+                    logs = []
+            
+            # 添加新日志
+            logs.append(log_entry)
+            
+            # 保持最近50条记录
+            if len(logs) > 50:
+                logs = logs[-50:]
+                
+            # 写入文件
+            with open(log_file, 'w', encoding='utf-8') as f:
+                json.dump(logs, f, indent=2, ensure_ascii=False)
+                
+            print(f"📋 性能日志已保存: {log_file}")
+            
+        except Exception as e:
+            print(f"⚠️ 保存性能日志失败: {e}")
+    
+    def _generate_performance_insights(self, perf_log):
+        """生成性能洞察建议"""
+        insights = []
+        
+        total_time = perf_log.get('total_execution_time', 0)
+        analysis_time = perf_log.get('analysis_phase', 0)
+        assignment_time = perf_log.get('total_assignment_loop_time', 0)
+        
+        # 分析各阶段耗时
+        if total_time > 30:
+            insights.append(f"总耗时较长 ({total_time:.1f}s), 需要优化")
+            
+        if assignment_time > analysis_time * 1.5:
+            insights.append(f"分配逻辑耗时较多 ({assignment_time:.1f}s vs {analysis_time:.1f}s), 可考虑算法优化")
+            
+        if perf_log.get('total_decision_time', 0) > assignment_time * 0.4:
+            insights.append("决策计算耗时较多, 可考虑缓存优化")
+            
+        if perf_log.get('fallback_operations', 0) > assignment_time * 0.2:
+            insights.append("回退操作频繁, 可考虑优化主要分配算法")
+            
+        avg_time = perf_log.get('avg_time_per_file_ms', 0)
+        if avg_time > 50:  # 50ms per file
+            insights.append(f"平均文件处理时间较长 ({avg_time:.1f}ms), 可考虑批量优化")
+            
+        if not insights:
+            insights.append("性能表现良好")
+            
+        return insights
