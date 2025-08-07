@@ -248,16 +248,28 @@ class EnhancedTaskAssigner:
         elapsed = (datetime.now() - start_time).total_seconds()
         assignment_time = (datetime.now() - assignment_start).total_seconds()
         
-        # 构建性能记录
+        # 构建详细性能记录
         perf_log = {
-            'analysis_phase': analysis_time,
-            'assignment_phase': assignment_time,
+            # 主要阶段时间
+            'analysis_phase_time': analysis_time,
+            'assignment_phase_time': assignment_time, 
             'total_execution_time': elapsed,
-            'files_processed': len([f for f in files if not f.get("assignee", "").strip()]),
+            'other_processing_time': elapsed - analysis_time - assignment_time,
+            
+            # 文件处理统计
+            'total_files': len(files),
+            'files_to_process': len([f for f in files if not f.get("assignee", "").strip()]),
             'success_count': success_count,
             'failed_count': failed_count,
+            
+            # 贡献者统计
             'contributors_count': len(person_task_count),
-            'avg_time_per_file_ms': (assignment_time / max(success_count + failed_count, 1)) * 1000
+            'workload_distribution': dict(person_task_count),
+            
+            # 性能指标
+            'avg_time_per_file_ms': (assignment_time / max(success_count + failed_count, 1)) * 1000,
+            'analysis_to_assignment_ratio': assignment_time / analysis_time if analysis_time > 0 else 0,
+            'success_rate': success_count / max(success_count + failed_count, 1) * 100
         }
         
         # 保存性能日志
@@ -267,18 +279,21 @@ class EnhancedTaskAssigner:
         print(f"📊 分配统计: 成功 {success_count}, 失败 {failed_count}, 用时 {elapsed:.2f}s")
         print(f"👥 涉及 {len(person_task_count)} 位贡献者")
         
-        # 性能分析提示 - 帮助用户理解那个28秒
+        # 性能分析提示 - 帮助用户理解性能瓶颈
+        other_time = elapsed - analysis_time - assignment_time
         if elapsed > 20:
-            print(f"\n🔍 性能分析 (总时间 {elapsed:.1f}s):")
-            print(f"  🧪 分析阶段: {analysis_time:.1f}s")
-            print(f"  👥 分配阶段: {assignment_time:.1f}s")
-            print(f"  📦 其他处理: {elapsed - analysis_time - assignment_time:.1f}s")
+            print(f"\n🔍 详细性能分析 (总时间 {elapsed:.1f}s):")
+            print(f"  🧪 分析阶段: {analysis_time:.1f}s ({analysis_time/elapsed*100:.1f}%)")
+            print(f"  👥 分配阶段: {assignment_time:.1f}s ({assignment_time/elapsed*100:.1f}%)")
+            print(f"  📦 其他处理: {other_time:.1f}s ({other_time/elapsed*100:.1f}%)")
             
             # 性能建议
             if assignment_time > analysis_time * 1.5:
                 print(f"  💡 建议: 分配逻辑耗时较多，可考虑优化算法")
-            if elapsed - analysis_time - assignment_time > 5:
-                print(f"  💡 建议: 其他处理耗时较多，检查I/O操作或缓存")
+            if other_time > 5:
+                print(f"  💡 建议: 其他处理耗时较多 ({other_time:.1f}s)，检查I/O操作或缓存")
+            if perf_log['avg_time_per_file_ms'] > 50:
+                print(f"  💡 建议: 平均文件处理时间较长 ({perf_log['avg_time_per_file_ms']:.1f}ms), 可考虑批量优化")
 
         # 显示负载分布
         self._show_workload_distribution(person_task_count)
@@ -618,13 +633,19 @@ class EnhancedTaskAssigner:
                 'component': 'EnhancedTaskAssigner',
                 'version': '2.3',
                 'performance_breakdown': perf_log,
-                'summary': {
+                'detailed_summary': {
                     'total_time': perf_log.get('total_execution_time', 0),
-                    'analysis_time': perf_log.get('analysis_phase', 0),
-                    'assignment_time': perf_log.get('total_assignment_loop_time', 0),
-                    'files_processed': perf_log.get('files_processed', 0),
-                    'success_rate': perf_log.get('success_count', 0) / max(perf_log.get('files_processed', 1), 1) * 100,
-                    'avg_time_per_file_ms': perf_log.get('avg_time_per_file_ms', 0)
+                    'analysis_phase_time': perf_log.get('analysis_phase_time', 0),
+                    'assignment_phase_time': perf_log.get('assignment_phase_time', 0),
+                    'other_processing_time': perf_log.get('other_processing_time', 0),
+                    'total_files': perf_log.get('total_files', 0),
+                    'files_to_process': perf_log.get('files_to_process', 0),
+                    'success_count': perf_log.get('success_count', 0),
+                    'failed_count': perf_log.get('failed_count', 0),
+                    'success_rate': perf_log.get('success_rate', 0),
+                    'avg_time_per_file_ms': perf_log.get('avg_time_per_file_ms', 0),
+                    'analysis_to_assignment_ratio': perf_log.get('analysis_to_assignment_ratio', 0),
+                    'contributors_involved': perf_log.get('contributors_count', 0)
                 },
                 'performance_insights': self._generate_performance_insights(perf_log)
             }

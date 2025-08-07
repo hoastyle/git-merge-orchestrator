@@ -101,24 +101,68 @@ class EnhancedContributorAnalyzer:
         months = months or self.config.get("analysis_months", DEFAULT_ANALYSIS_MONTHS)
 
         try:
-            # 使用增强批量Git日志解析
+            from datetime import datetime
+            
+            # 阶段1: 使用增强批量Git日志解析
+            git_parsing_start = datetime.now()
             batch_contributors = self.git_ops.get_enhanced_contributors_batch(
                 file_paths, months, enable_line_analysis
             )
+            git_parsing_time = (datetime.now() - git_parsing_start).total_seconds()
+            print(f"⚡ Git日志解析完成: {git_parsing_time:.2f}s ({len(batch_contributors)} 个文件)")
 
-            # 对每个文件的结果进行后处理
+            # 阶段2: 对每个文件的结果进行后处理
+            post_processing_start = datetime.now()
             processed_results = {}
-            for file_path, contributors in batch_contributors.items():
+            file_count = len(batch_contributors)
+            
+            print(f"🧪 开始后处理: {file_count} 个文件...")
+            
+            # 详细的后处理统计
+            filtering_time = 0
+            scoring_time = 0
+            normalization_time = 0
+            
+            for i, (file_path, contributors) in enumerate(batch_contributors.items(), 1):
                 # 应用活跃度过滤
+                filter_start = datetime.now()
                 active_contributors = self._filter_active_contributors(contributors)
+                filtering_time += (datetime.now() - filter_start).total_seconds()
 
                 # 应用分数阈值过滤
+                score_start = datetime.now()
                 filtered_contributors = self._apply_score_threshold(active_contributors)
+                scoring_time += (datetime.now() - score_start).total_seconds()
 
                 # 标准化分数
+                norm_start = datetime.now()
                 normalized_contributors = self._normalize_scores(filtered_contributors)
+                normalization_time += (datetime.now() - norm_start).total_seconds()
 
                 processed_results[file_path] = normalized_contributors
+                
+                # 进度显示（每10%显示一次）
+                if i % max(1, file_count // 10) == 0 or i == file_count:
+                    progress = (i / file_count) * 100
+                    elapsed = (datetime.now() - post_processing_start).total_seconds()
+                    print(f"🔄 后处理进度: {i}/{file_count} ({progress:.1f}%) - 用时 {elapsed:.1f}s")
+            
+            post_processing_time = (datetime.now() - post_processing_start).total_seconds()
+            print(f"✅ 后处理完成: {post_processing_time:.2f}s")
+            print(f"  • 活跃度过滤: {filtering_time:.2f}s")
+            print(f"  • 分数过滤: {scoring_time:.2f}s")  
+            print(f"  • 分数标准化: {normalization_time:.2f}s")
+            
+            # 保存详细性能记录
+            self._save_analysis_performance_log({
+                'git_parsing_time': git_parsing_time,
+                'post_processing_time': post_processing_time,
+                'filtering_time': filtering_time,
+                'scoring_time': scoring_time,
+                'normalization_time': normalization_time,
+                'files_processed': file_count,
+                'total_analysis_time': git_parsing_time + post_processing_time
+            })
 
             return processed_results
 
@@ -481,3 +525,89 @@ class EnhancedContributorAnalyzer:
             print(
                 f"  最终分数: enhanced={enhanced_score:.3f}, normalized={normalized_score:.3f}"
             )
+            
+    def _save_analysis_performance_log(self, perf_data):
+        """保存分析性能详细日志"""
+        try:
+            import json
+            from pathlib import Path
+            from datetime import datetime
+            
+            # 设置日志文件路径
+            if hasattr(self.git_ops, 'repo_path'):
+                repo_path = Path(self.git_ops.repo_path)
+            else:
+                repo_path = Path(".")
+                
+            log_file = repo_path / ".merge_work" / "enhanced_analysis_performance.json"
+            log_file.parent.mkdir(exist_ok=True)
+            
+            # 构建日志条目
+            log_entry = {
+                'timestamp': datetime.now().isoformat(),
+                'component': 'EnhancedContributorAnalyzer',
+                'version': '2.3',
+                'detailed_breakdown': perf_data,
+                'performance_insights': self._generate_analysis_insights(perf_data)
+            }
+            
+            # 加载现有日志
+            logs = []
+            if log_file.exists():
+                try:
+                    with open(log_file, 'r', encoding='utf-8') as f:
+                        logs = json.load(f)
+                except:
+                    logs = []
+            
+            # 添加新日志
+            logs.append(log_entry)
+            
+            # 保持最近30条记录
+            if len(logs) > 30:
+                logs = logs[-30:]
+                
+            # 写入文件
+            with open(log_file, 'w', encoding='utf-8') as f:
+                json.dump(logs, f, indent=2, ensure_ascii=False)
+                
+        except Exception as e:
+            print(f"⚠️ 保存分析性能日志失败: {e}")
+    
+    def _generate_analysis_insights(self, perf_data):
+        """生成分析性能洞察"""
+        insights = []
+        
+        total_time = perf_data.get('total_analysis_time', 0)
+        git_time = perf_data.get('git_parsing_time', 0)
+        post_time = perf_data.get('post_processing_time', 0)
+        files_count = perf_data.get('files_processed', 0)
+        
+        # 分析时间分布
+        if post_time > git_time:
+            insights.append(f"后处理耗时较多 ({post_time:.1f}s vs {git_time:.1f}s Git解析)")
+        
+        # 检查单个细分阶段  
+        filter_time = perf_data.get('filtering_time', 0)
+        scoring_time = perf_data.get('scoring_time', 0)
+        norm_time = perf_data.get('normalization_time', 0)
+        
+        if filter_time > post_time * 0.4:
+            insights.append(f"活跃度过滤耗时较多 ({filter_time:.2f}s)")
+        if scoring_time > post_time * 0.4:
+            insights.append(f"分数过滤耗时较多 ({scoring_time:.2f}s)")
+        if norm_time > post_time * 0.4:
+            insights.append(f"分数标准化耗时较多 ({norm_time:.2f}s)")
+            
+        # 性能建议
+        if total_time > 30:
+            insights.append(f"分析总耗时较长 ({total_time:.1f}s), 可考虑缓存优化")
+            
+        avg_time_per_file = total_time / files_count * 1000 if files_count > 0 else 0
+        if avg_time_per_file > 25:  # 25ms per file
+            insights.append(f"平均文件分析时间较长 ({avg_time_per_file:.1f}ms)")
+            
+        if not insights:
+            insights.append("分析性能表现良好")
+            
+        return insights
