@@ -1,7 +1,7 @@
 # Git Merge Orchestrator 项目状态摘要
 
 ## 📅 更新时间
-**2025-08-06 11:45 CST**
+**2025-08-07**
 
 ## 🎯 项目概述
 
@@ -86,11 +86,9 @@ git-merge-orchestrator/                    # 主项目目录
 ├── 📚 文档
 │   ├── CLAUDE.md                          # Claude Code 项目指南（完整同步）
 │   ├── TODO.md                            # 任务状态（已全部完成）
-│   ├── Plan.md                            # 完整优化方案
+│   ├── PROJECT_STATUS.md                  # 项目状态摘要
 │   ├── CHANGELOG.md                       # 版本更新日志
 │   ├── TESTING_GUIDE.md                   # 🆕 测试指导文档
-│   ├── continue.md                        # 项目状态摘要
-│   ├── PROJECT_STATUS.md                  # 本文档
 │   └── README.md                          # 项目说明
 └── 
 └── 其他文件
@@ -279,7 +277,7 @@ DEFAULT_IGNORE_PATTERNS = [
 ### 👨‍💻 开发文档  
 - **CLAUDE.md** - Claude Code项目指南（与代码100%同步）
 - **CONTRIBUTING.md** - Git协作和贡献指南
-- **Plan.md** - 详细的优化方案和实施计划
+- **PROJECT_STATUS.md** - 项目状态摘要和功能概览
 
 ### ✅ 状态文档
 - **TODO.md** - 所有任务完成状态（全部完成）
@@ -423,7 +421,7 @@ Co-Authored-By: [Your Name] <your.email@example.com>"
 ### 文档资源
 - 查看 `TESTING_GUIDE.md` 了解详细测试方法
 - 参考 `CONTRIBUTING.md` 了解协作流程  
-- 阅读 `Plan.md` 了解架构设计思路
+- 阅读 `CLAUDE.md` 了解完整架构设计
 
 ### 问题排查
 ```bash
