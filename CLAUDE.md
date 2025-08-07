@@ -219,9 +219,26 @@ Code should support both processing modes:
 - **Query Optimization**: Indexed searching for fast file lookups
 
 @TODO.md
-@Plan.md
 
-# 其他
-* 每次提交前，修改的代码部分需要进行格式化。如果是python，利用black进行格式化。
-* 新的v2.2架构支持文件级处理，提供更精确的任务分配和进度跟踪
-* 默认使用file_level模式，可通过参数切换到group_based模式以保持向后兼容性
+# 开发规范
+
+## 代码格式化
+* 每次提交前，修改的代码部分需要进行格式化
+* Python代码使用black进行格式化：`black <file_path>`
+* 保持代码风格一致性
+
+## v2.2架构要点
+* 默认使用file_level处理模式，提供更精确的任务分配和进度跟踪
+* 可通过参数切换到group_based模式以保持向后兼容性
+* 所有新功能都应同时支持两种处理模式
+* 重点使用legacy合并策略作为默认选择
+
+## 测试要求
+* 使用`python run_tests.py`进行测试
+* 重要功能变更需要进行健康检查：`python run_tests.py --health`
+* 利用git-merge-orchestrator-test目录进行完整测试
+
+## 项目状态
+**版本**: v2.2 (生产就绪)  
+**更新**: 2025-08-07  
+**状态**: ✅ 开发完成，所有TODO项目已实现
