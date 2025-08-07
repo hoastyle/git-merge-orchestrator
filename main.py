@@ -252,12 +252,26 @@ def show_welcome_banner(orchestrator, config_manager=None):
     strategy_info = orchestrator.get_merge_strategy_info()
     print(f"🔧 当前合并策略: {strategy_info['mode_name']}")
     print(f"📝 策略说明: {strategy_info['description']}")
+    
+    # 显示增强分析系统状态
+    if hasattr(orchestrator, 'use_enhanced_analysis'):
+        analysis_mode = "增强智能分析 v2.3" if orchestrator.use_enhanced_analysis else "基础分析系统"
+        print(f"🧠 分析系统: {analysis_mode}")
+        if orchestrator.use_enhanced_analysis:
+            print(f"💡 增强特性: 行数权重、时间衰减、一致性评分")
 
     # 显示版本特性
-    print(f"\n🆕 v2.2 架构特性:")
+    version_label = "v2.3" if getattr(orchestrator, 'use_enhanced_analysis', False) else "v2.2"
+    print(f"\n🆕 {version_label} 架构特性:")
     print("   • 📁 文件级处理: 更精确的任务分配和进度跟踪")
     print("   • 🔄 双模式支持: 文件级处理 + 传统组模式兼容")
-    print("   • 🎯 智能分配: 基于文件贡献度的精确分配")
+    
+    if getattr(orchestrator, 'use_enhanced_analysis', False):
+        print("   • 🚀 增强分析: 多维度贡献者评分系统")
+        print("   • 📊 行数权重: 基于代码变更量的智能分配")
+    else:
+        print("   • 🎯 智能分配: 基于文件贡献度的精确分配")
+    
     print("   • ⚖️ 负载均衡: 自动优化工作负载分布")
     print("   • 📖 自动配置: 后续运行无需参数")
 

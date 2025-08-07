@@ -109,6 +109,11 @@ class FlatMenuManager:
             # 显示处理模式
             mode_info = self.orchestrator.get_processing_mode_info()
             print(f"🔧 模式: {mode_info['mode_name']}")
+            
+            # 显示增强分析状态
+            if hasattr(self.orchestrator, 'use_enhanced_analysis'):
+                analysis_status = "🚀 增强" if self.orchestrator.use_enhanced_analysis else "🔧 基础"
+                print(f"🧠 分析: {analysis_status}")
 
             # 显示分支信息
             print(
@@ -144,7 +149,8 @@ class FlatMenuManager:
                         )
             else:
                 print("📊 状态: 尚未创建合并计划")
-                print("💡 建议: 选择 1 (快速全流程) 或 3 (创建计划)")
+                analysis_hint = "增强智能分析" if getattr(self.orchestrator, 'use_enhanced_analysis', False) else "基础分析"
+                print(f"💡 建议: 选择 1 (快速全流程) 或 3 (创建计划) - 将使用{analysis_hint}")
 
         except Exception:
             print("📊 状态: 加载中...")

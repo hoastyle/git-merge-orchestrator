@@ -955,17 +955,28 @@ class GitOperations:
             )
 
         result = {}
+        total_files = len(file_paths)
         batch_size = min(
-            len(file_paths), ENHANCED_CONTRIBUTOR_ANALYSIS.get("max_parallel_files", 50)
+            total_files, ENHANCED_CONTRIBUTOR_ANALYSIS.get("max_parallel_files", 50)
         )
+        
+        print(f"📊 增强批量分析: {total_files} 个文件，{total_files // batch_size + 1} 个批次")
 
         # 分批处理，避免命令行过长
+        batch_count = 0
         for i in range(0, len(file_paths), batch_size):
+            batch_count += 1
             batch_files = file_paths[i : i + batch_size]
+            print(f"🔄 处理批次 {batch_count}/{(total_files // batch_size) + 1}: {len(batch_files)} 个文件...")
+            
             batch_result = self._process_enhanced_batch(
                 batch_files, months, enable_line_analysis
             )
             result.update(batch_result)
+            
+            processed_count = min(i + batch_size, total_files)
+            progress = (processed_count / total_files) * 100
+            print(f"✅ 批次 {batch_count} 完成: {processed_count}/{total_files} ({progress:.1f}%)")
 
         return result
 

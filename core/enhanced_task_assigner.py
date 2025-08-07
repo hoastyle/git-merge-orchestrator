@@ -98,8 +98,11 @@ class EnhancedTaskAssigner:
             DEFAULT_ACTIVE_MONTHS
         )
 
-        # 处理不同的处理模式
-        processing_mode = getattr(plan, "processing_mode", "file_level")
+        # 处理不同的处理模式（兼容字典和对象）
+        if isinstance(plan, dict):
+            processing_mode = plan.get("processing_mode", "file_level")
+        else:
+            processing_mode = getattr(plan, "processing_mode", "file_level")
 
         if processing_mode == "file_level":
             return self._assign_file_level_enhanced(
@@ -109,6 +112,7 @@ class EnhancedTaskAssigner:
                 enable_line_analysis,
                 active_contributors,
                 start_time,
+                include_fallback,
             )
         else:
             return self._assign_group_level_enhanced(
@@ -118,6 +122,7 @@ class EnhancedTaskAssigner:
                 enable_line_analysis,
                 active_contributors,
                 start_time,
+                include_fallback,
             )
 
     def _assign_file_level_enhanced(
@@ -128,9 +133,15 @@ class EnhancedTaskAssigner:
         enable_line_analysis,
         active_contributors,
         start_time,
+        include_fallback=True,
     ):
         """文件级增强分配"""
-        files = getattr(plan, "files", [])
+        # 兼容字典和对象两种数据结构
+        if isinstance(plan, dict):
+            files = plan.get("files", [])
+        else:
+            files = getattr(plan, "files", [])
+            
         if not files:
             print("❌ 无文件需要分配")
             return 0, 0, {}
@@ -146,10 +157,17 @@ class EnhancedTaskAssigner:
             return 0, 0, {}
 
         # 批量分析文件贡献者
-        print("🔍 正在进行批量增强贡献者分析...")
+        from datetime import datetime
+        analysis_start = datetime.now()
+        print(f"🔍 正在进行批量增强贡献者分析... ({len(file_paths)} 个文件)")
+        print("⚡ 启用特性: 行数权重、时间衰减、一致性评分")
+        
         batch_contributors = self.enhanced_analyzer.analyze_contributors_batch(
             file_paths, enable_line_analysis=enable_line_analysis
         )
+        
+        analysis_time = (datetime.now() - analysis_start).total_seconds()
+        print(f"✅ 增强贡献者分析完成: {analysis_time:.2f}s ({analysis_time/len(file_paths)*1000:.1f}ms/文件)")
 
         # 执行文件分配
         success_count = 0
@@ -254,9 +272,15 @@ class EnhancedTaskAssigner:
         enable_line_analysis,
         active_contributors,
         start_time,
+        include_fallback=True,
     ):
         """组级增强分配（向后兼容）"""
-        groups = getattr(plan, "groups", [])
+        # 兼容字典和对象两种数据结构
+        if isinstance(plan, dict):
+            groups = plan.get("groups", [])
+        else:
+            groups = getattr(plan, "groups", [])
+            
         if not groups:
             print("❌ 无分组需要分配")
             return 0, 0, {}
@@ -285,6 +309,7 @@ class EnhancedTaskAssigner:
                 continue
 
             # 分析组内文件的贡献者
+            print(f"🔍 分析组 {group_name}: {len(group_files)} 个文件...")
             batch_contributors = self.enhanced_analyzer.analyze_contributors_batch(
                 group_files, enable_line_analysis=enable_line_analysis
             )
@@ -471,10 +496,13 @@ class EnhancedTaskAssigner:
         # 这里可以调用原有的基础分配逻辑
         # 或者返回最小化的分配结果
 
-        processing_mode = getattr(plan, "processing_mode", "file_level")
-        items = getattr(
-            plan, "files" if processing_mode == "file_level" else "groups", []
-        )
+        # 兼容字典和对象两种数据结构
+        if isinstance(plan, dict):
+            processing_mode = plan.get("processing_mode", "file_level")
+            items = plan.get("files" if processing_mode == "file_level" else "groups", [])
+        else:
+            processing_mode = getattr(plan, "processing_mode", "file_level")
+            items = getattr(plan, "files" if processing_mode == "file_level" else "groups", [])
 
         # 简单的轮询分配
         active_contributors = self.git_ops.get_active_contributors(
@@ -503,10 +531,13 @@ class EnhancedTaskAssigner:
 
     def get_assignment_analysis_report(self, plan):
         """获取分配分析报告"""
-        processing_mode = getattr(plan, "processing_mode", "file_level")
-        items = getattr(
-            plan, "files" if processing_mode == "file_level" else "groups", []
-        )
+        # 兼容字典和对象两种数据结构
+        if isinstance(plan, dict):
+            processing_mode = plan.get("processing_mode", "file_level")
+            items = plan.get("files" if processing_mode == "file_level" else "groups", [])
+        else:
+            processing_mode = getattr(plan, "processing_mode", "file_level")
+            items = getattr(plan, "files" if processing_mode == "file_level" else "groups", [])
 
         report = {
             "total_items": len(items),

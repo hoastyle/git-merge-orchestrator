@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Git Merge Orchestrator - 主控制器（支持双版本）
 整合所有模块，提供统一的API接口，支持Legacy和Standard两种合并策略
@@ -14,10 +15,11 @@ from utils.file_helper import FileHelper
 from utils.ignore_manager import IgnoreManager
 from ui.display_helper import DisplayHelper
 from core.git_operations import GitOperations
-from core.contributor_analyzer import ContributorAnalyzer
 from core.optimized_contributor_analyzer import OptimizedContributorAnalyzer
 from core.optimized_task_assigner import OptimizedTaskAssigner
-from core.task_assigner import TaskAssigner
+# v2.3 增强分析功能
+from core.enhanced_contributor_analyzer import EnhancedContributorAnalyzer
+from core.enhanced_task_assigner import EnhancedTaskAssigner
 from core.merge_executor_factory import MergeExecutorFactory
 from core.plan_manager import PlanManager
 from core.query_system import QuerySystem
@@ -48,7 +50,19 @@ class GitMergeOrchestrator:
 
         # 初始化核心组件
         self.git_ops = GitOperations(repo_path, self.ignore_manager)
-        self.contributor_analyzer = OptimizedContributorAnalyzer(self.git_ops)
+        
+        # 智能选择贡献者分析器：优先使用增强版本
+        from config import ENHANCED_CONTRIBUTOR_ANALYSIS
+        if ENHANCED_CONTRIBUTOR_ANALYSIS.get("enabled", True):
+            print("🚀 启用增强贡献者分析系统 v2.3")
+            self.enhanced_analyzer = EnhancedContributorAnalyzer(self.git_ops)
+            self.contributor_analyzer = self.enhanced_analyzer  # 设置为主分析器
+            self.use_enhanced_analysis = True
+        else:
+            print("🔧 使用基础贡献者分析系统")
+            self.contributor_analyzer = OptimizedContributorAnalyzer(self.git_ops)
+            self.enhanced_analyzer = None
+            self.use_enhanced_analysis = False
 
         # 根据处理模式初始化不同的组件
         if processing_mode == "file_level":
@@ -61,16 +75,34 @@ class GitMergeOrchestrator:
                 self.git_ops, self.file_manager, self.contributor_analyzer
             )
 
-            # 兼容性：保留组模式组件但标记为废弃
+            # 智能选择任务分配器（兼容性保留组模式组件）
             self.file_helper = FileHelper(repo_path, max_files_per_group)
-            self.task_assigner = OptimizedTaskAssigner(self.contributor_analyzer)
+            if self.use_enhanced_analysis:
+                # 使用增强任务分配器，但提供回退到优化分配器
+                fallback_assigner = OptimizedTaskAssigner(OptimizedContributorAnalyzer(self.git_ops))
+                self.enhanced_task_assigner = EnhancedTaskAssigner(self.git_ops, fallback_assigner)
+                self.task_assigner = self.enhanced_task_assigner
+            else:
+                self.task_assigner = OptimizedTaskAssigner(self.contributor_analyzer)
+                self.enhanced_task_assigner = None
+                
             self.plan_manager = PlanManager(
                 self.git_ops, self.file_helper, self.contributor_analyzer
             )
         else:
             # 传统组模式组件（向后兼容）
             self.file_helper = FileHelper(repo_path, max_files_per_group)
-            self.task_assigner = OptimizedTaskAssigner(self.contributor_analyzer)
+            
+            # 智能选择任务分配器
+            if self.use_enhanced_analysis:
+                # 使用增强任务分配器，提供回退机制
+                fallback_assigner = OptimizedTaskAssigner(OptimizedContributorAnalyzer(self.git_ops))
+                self.enhanced_task_assigner = EnhancedTaskAssigner(self.git_ops, fallback_assigner)
+                self.task_assigner = self.enhanced_task_assigner
+            else:
+                self.task_assigner = OptimizedTaskAssigner(self.contributor_analyzer)
+                self.enhanced_task_assigner = None
+                
             self.plan_manager = PlanManager(
                 self.git_ops, self.file_helper, self.contributor_analyzer
             )
@@ -192,56 +224,115 @@ class GitMergeOrchestrator:
     ):
         """智能自动分配任务"""
         if self.processing_mode == "file_level":
-            print(f"🚀 使用文件级智能分配系统")
-            result = self.file_task_assigner.auto_assign_files(
-                exclude_authors, max_tasks_per_person, include_fallback
-            )
-            if result:
-                print(f"✅ 文件级分配完成: {result['assigned_count']} 个文件")
-                return result
-            else:
+            # 文件级模式使用增强任务分配器
+            file_plan = self.file_manager.load_file_plan()
+            if not file_plan:
                 DisplayHelper.print_error("文件级计划不存在，请先创建合并计划")
                 return None
+                
+            # 使用增强任务分配器处理文件级分配
+            if self.use_enhanced_analysis:
+                print("🚀 使用增强文件级智能分配系统")
+                success, failed, stats = self.enhanced_task_assigner.enhanced_auto_assign_tasks(
+                    file_plan, exclude_authors, max_tasks_per_person, enable_line_analysis=True, include_fallback=include_fallback
+                )
+                
+                if success > 0 or failed == 0:
+                    # 保存更新后的文件计划
+                    self.file_manager.save_file_plan(file_plan)
+                    print(f"✅ 增强文件级分配完成: 成功 {success}, 失败 {failed}")
+                    return {"assigned_count": success, "failed_count": failed, "stats": stats}
+                else:
+                    DisplayHelper.print_error("增强文件级分配失败")
+                    return None
+            else:
+                # 使用基础文件级分配器
+                print("🔧 使用基础文件级智能分配系统")
+                result = self.file_task_assigner.auto_assign_files(
+                    exclude_authors, max_tasks_per_person, include_fallback
+                )
+                if result:
+                    print(f"✅ 文件级分配完成: {result['assigned_count']} 个文件")
+                    return result
+                else:
+                    DisplayHelper.print_error("文件级分配失败")
+                    return None
         else:
+            # 组模式（传统模式）
             print(f"📋 使用传统组模式分配系统")
             plan = self.file_helper.load_plan()
             if not plan:
                 DisplayHelper.print_error("合并计划文件不存在，请先运行创建合并计划")
                 return None
 
-            # 使用优化版分配器
-            result = self.task_assigner.turbo_auto_assign_tasks(
-                plan, exclude_authors, max_tasks_per_person, include_fallback
-            )
+            # 智能选择分配器
+            if self.use_enhanced_analysis:
+                print("🚀 使用增强组级智能任务分配")
+                enhanced_result = self.enhanced_task_assigner.enhanced_auto_assign_tasks(
+                    plan, exclude_authors, max_tasks_per_person, enable_line_analysis=True, include_fallback=include_fallback
+                )
+                
+                # 转换增强分配器的返回格式为标准格式
+                if enhanced_result:
+                    success_count, failed_count, assignment_stats = enhanced_result
+                    # 构建兼容格式
+                    result = {
+                        "assignment_count": assignment_stats.get("workload_distribution", {}),
+                        "unassigned_groups": [],  # 增强版直接处理单个文件，不使用组概念
+                        "active_contributors": set(),  # 将在下面填充
+                        "inactive_contributors": set(),
+                        "success_count": success_count,
+                        "failed_count": failed_count,
+                        "assignment_stats": assignment_stats
+                    }
+                    
+                    # 从计划中提取活跃/非活跃贡献者信息
+                    all_contributors = set()
+                    for group in plan.get("groups", []):
+                        if group.get("assignee") and group.get("assignee") != "未分配":
+                            all_contributors.add(group.get("assignee"))
+                    result["active_contributors"] = all_contributors
+                    
+                    print(f"✅ 增强组级智能分配完成: 成功 {success_count}, 失败 {failed_count}")
+                else:
+                    result = None
+            else:
+                print("🔧 使用优化版分配器")
+                result = self.task_assigner.turbo_auto_assign_tasks(
+                    plan, exclude_authors, max_tasks_per_person, include_fallback
+                )
 
             if result:
                 # 保存更新后的计划
                 self.file_helper.save_plan(plan)
 
-                # 显示性能优化报告
-                if "performance_stats" in result:
+                # 显示性能优化报告（仅优化版支持）
+                if not self.use_enhanced_analysis and "performance_stats" in result:
                     perf_report = self.task_assigner.get_optimization_report(
                         result["performance_stats"]
                     )
                     print(perf_report)
 
-                # 原有的分配总结显示
-                active_contributors = result["active_contributors"]
-                inactive_contributors = result["inactive_contributors"]
-                assignment_count = result["assignment_count"]
-                unassigned_groups = result["unassigned_groups"]
+                # 显示分配总结
+                active_contributors = result.get("active_contributors", set())
+                inactive_contributors = result.get("inactive_contributors", set())
+                assignment_count = result.get("assignment_count", {})
+                unassigned_groups = result.get("unassigned_groups", [])
 
                 print(f"\n📊 自动分配总结:")
                 print(f"🎯 活跃贡献者: {len(active_contributors)} 位")
-                print(f"🚫 自动排除: {len(inactive_contributors)} 位（近3个月无提交）")
+                if inactive_contributors:
+                    print(f"🚫 自动排除: {len(inactive_contributors)} 位（近3个月无提交）")
                 print(f"🔧 手动排除: {len(exclude_authors or [])} 位")
 
-                summary = DisplayHelper.format_assignment_summary(
-                    assignment_count, unassigned_groups
-                )
-                print(summary)
+                if assignment_count and unassigned_groups is not None:
+                    summary = DisplayHelper.format_assignment_summary(
+                        assignment_count, unassigned_groups
+                    )
+                    print(summary)
 
-                DisplayHelper.print_success("涡轮增压自动分配完成")
+                completion_message = "增强组级智能分配完成" if self.use_enhanced_analysis else "涡轮增压自动分配完成"
+                DisplayHelper.print_success(completion_message)
 
             return plan
 
