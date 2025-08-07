@@ -5,7 +5,7 @@ Git Merge Orchestrator - 配置管理
 
 # 默认配置
 DEFAULT_MAX_FILES_PER_GROUP = 5
-DEFAULT_MAX_TASKS_PER_PERSON = 200
+DEFAULT_MAX_TASKS_PER_PERSON = 1000
 DEFAULT_ACTIVE_MONTHS = 3
 DEFAULT_ANALYSIS_MONTHS = 12
 
@@ -88,7 +88,7 @@ DEFAULT_IGNORE_PATTERNS = [
     "*.rar",
     "*.7z",
     # customize
-    "settings/",
+    # "settings/",
 ]
 
 # 忽略规则类型
@@ -203,3 +203,84 @@ CACHE_EXPIRY_HOURS = 24  # 缓存过期时间（小时）
 MAX_WORKER_THREADS = 4  # 最大并行线程数
 BATCH_SIZE_THRESHOLD = 10  # 启用批量处理的最小文件数
 ENABLE_PERFORMANCE_MONITORING = True  # 是否启用性能监控
+
+# 增强贡献者分析配置 (v2.3新增)
+ENHANCED_CONTRIBUTOR_ANALYSIS = {
+    # 核心开关
+    "enabled": True,
+    "algorithm_version": "2.0",
+    "fallback_to_simple": True,  # 失败时回退到简单算法
+    # 基础评分配置
+    "base_commit_score": 1.0,
+    "analysis_months": 12,
+    "active_months": 3,
+    # 时间衰减权重配置
+    "time_weight_enabled": True,
+    "time_half_life_days": 180,  # 半衰期6个月，近期贡献权重更高
+    "time_weight_factor": 0.4,  # 时间权重影响因子
+    # 行数变更权重配置
+    "line_weight_enabled": True,
+    "line_weight_factor": 0.3,  # 行数权重影响因子
+    "small_change_threshold": 10,  # 小变更阈值(行数)
+    "medium_change_threshold": 100,  # 中变更阈值(行数)
+    "large_change_threshold": 1000,  # 大变更阈值(行数)
+    "max_line_weight_multiplier": 3.0,  # 最大行数权重倍数
+    # 权重计算算法配置
+    "line_weight_algorithm": "logarithmic",  # logarithmic, linear, sigmoid
+    "magnitude_scaling": {
+        "linear_factor": 0.01,  # 线性增长因子
+        "log_base": 10,  # 对数底数
+        "sigmoid_steepness": 0.1,  # sigmoid陡峭度
+    },
+    # 一致性权重配置
+    "consistency_weight_enabled": True,
+    "consistency_bonus_factor": 0.2,  # 持续贡献奖励因子
+    "min_commits_for_consistency": 3,  # 计算一致性的最小提交数
+    # 文件关联权重配置
+    "file_relationship_weight_enabled": True,
+    "related_file_bonus": 0.1,  # 相关文件贡献奖励
+    "directory_coherence_bonus": 0.15,  # 目录连贯性奖励
+    # 提交质量评估配置
+    "commit_quality_weight_enabled": False,  # 暂时禁用，未来功能
+    "commit_message_analysis": False,  # 提交消息分析
+    "merge_commit_penalty": 0.1,  # 合并提交权重减少
+    # 分配决策配置
+    "assignment_algorithm": "comprehensive",  # simple, weighted, comprehensive
+    "score_normalization": "min_max",  # min_max, z_score, percentile
+    "minimum_score_threshold": 0.1,  # 最低分数阈值
+    # 缓存和性能配置
+    "cache_enabled": True,
+    "cache_expiry_hours": 24,
+    "parallel_processing": True,
+    "max_parallel_files": 50,
+    # 调试和日志配置
+    "debug_mode": False,
+    "detailed_breakdown": False,
+    "log_scoring_details": False,
+    "export_analysis_results": False,
+    # 异常处理配置
+    "handle_renamed_files": True,
+    "ignore_merge_commits": False,
+    "handle_large_refactors": True,
+    "max_single_commit_lines": 10000,  # 单次提交最大行数限制
+}
+
+# 算法类型配置
+ALGORITHM_CONFIGS = {
+    "simple": {
+        "use_time_weight": False,
+        "use_line_weight": False,
+        "use_consistency_weight": False,
+    },
+    "weighted": {
+        "use_time_weight": True,
+        "use_line_weight": True,
+        "use_consistency_weight": False,
+    },
+    "comprehensive": {
+        "use_time_weight": True,
+        "use_line_weight": True,
+        "use_consistency_weight": True,
+        "use_file_relationship": True,
+    },
+}

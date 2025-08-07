@@ -561,3 +561,541 @@ class GitOperations:
         except Exception as e:
             print(f"分析文件 {file_path} 时出错: {e}")
             return {}
+
+    # === 增强的Git日志解析功能（v2.3新增）===
+
+    def get_enhanced_file_contributors(
+        self, file_path, months=12, enable_line_analysis=True
+    ):
+        """
+        增强的文件贡献者分析（支持行数权重）
+        
+        Args:
+            file_path: 文件路径
+            months: 分析时间范围（月）
+            enable_line_analysis: 是否启用行数变更分析
+        
+        Returns:
+            dict: 增强的贡献者信息 {作者: {基础信息 + 行数信息}}
+        """
+        try:
+            from config import ENHANCED_CONTRIBUTOR_ANALYSIS
+
+            if not ENHANCED_CONTRIBUTOR_ANALYSIS.get("enabled", True):
+                # 回退到简单分析
+                return self.get_file_contributors_analysis(file_path, months)
+
+            contributors = {}
+
+            # 获取时间范围
+            cutoff_date = (datetime.now() - timedelta(days=months * 30)).strftime(
+                "%Y-%m-%d"
+            )
+
+            if enable_line_analysis and ENHANCED_CONTRIBUTOR_ANALYSIS.get(
+                "line_weight_enabled", True
+            ):
+                # 使用 --numstat 获取行数变更信息
+                enhanced_cmd = (
+                    f'git log --follow --since="{cutoff_date}" '
+                    f'--format="COMMIT:%H|%an|%at" --numstat -- "{file_path}"'
+                )
+                enhanced_result = self.run_command(enhanced_cmd)
+
+                if enhanced_result:
+                    contributors = self._parse_enhanced_git_log(
+                        enhanced_result, file_path
+                    )
+
+            # 如果增强分析失败，回退到基础分析
+            if not contributors:
+                print(f"⚠️  增强分析失败，回退到基础分析: {file_path}")
+                return self.get_file_contributors_analysis(file_path, months)
+
+            # 应用权重算法
+            contributors = self._apply_enhanced_scoring(contributors, file_path)
+
+            return contributors
+
+        except Exception as e:
+            print(f"增强分析文件 {file_path} 时出错: {e}")
+            # 回退到基础分析
+            return self.get_file_contributors_analysis(file_path, months)
+
+    def _parse_enhanced_git_log(self, git_output, file_path):
+        """
+        解析增强的git log输出（包含--numstat信息）
+        
+        Args:
+            git_output: git log --numstat 的输出
+            file_path: 目标文件路径
+            
+        Returns:
+            dict: 解析后的贡献者信息
+        """
+        contributors = {}
+        current_commit = None
+
+        lines = git_output.split("\n")
+        i = 0
+
+        while i < len(lines):
+            line = lines[i].strip()
+
+            if not line:
+                i += 1
+                continue
+
+            # 解析提交信息行：COMMIT:hash|author|timestamp
+            if line.startswith("COMMIT:"):
+                try:
+                    _, commit_info = line.split(":", 1)
+                    commit_hash, author, timestamp_str = commit_info.split("|")
+                    timestamp = int(timestamp_str)
+
+                    current_commit = {
+                        "hash": commit_hash,
+                        "author": author,
+                        "timestamp": timestamp,
+                        "files": [],
+                    }
+                except ValueError as e:
+                    print(f"解析提交信息失败: {line}, 错误: {e}")
+                    current_commit = None
+
+            # 解析文件变更统计：additions deletions filename
+            elif current_commit and "\t" in line:
+                try:
+                    parts = line.split("\t")
+                    if len(parts) >= 3:
+                        additions_str, deletions_str, filename = (
+                            parts[0],
+                            parts[1],
+                            parts[2],
+                        )
+
+                        # 只处理目标文件
+                        if filename == file_path:
+                            additions = (
+                                0 if additions_str == "-" else int(additions_str)
+                            )
+                            deletions = (
+                                0 if deletions_str == "-" else int(deletions_str)
+                            )
+
+                            current_commit["files"].append(
+                                {
+                                    "filename": filename,
+                                    "additions": additions,
+                                    "deletions": deletions,
+                                    "total_changes": additions + deletions,
+                                }
+                            )
+
+                            # 更新贡献者统计
+                            author = current_commit["author"]
+                            if author not in contributors:
+                                contributors[author] = {
+                                    "total_commits": 0,
+                                    "recent_commits": 0,
+                                    "total_additions": 0,
+                                    "total_deletions": 0,
+                                    "total_changes": 0,
+                                    "commits_detail": [],
+                                    "score": 0,
+                                }
+
+                            contributors[author]["total_commits"] += 1
+                            contributors[author][
+                                "recent_commits"
+                            ] += 1  # 由于是since查询，都是recent
+                            contributors[author]["total_additions"] += additions
+                            contributors[author]["total_deletions"] += deletions
+                            contributors[author]["total_changes"] += (
+                                additions + deletions
+                            )
+
+                            contributors[author]["commits_detail"].append(
+                                {
+                                    "hash": current_commit["hash"],
+                                    "timestamp": current_commit["timestamp"],
+                                    "additions": additions,
+                                    "deletions": deletions,
+                                    "total_changes": additions + deletions,
+                                }
+                            )
+
+                except (ValueError, IndexError) as e:
+                    # 忽略解析失败的行
+                    pass
+
+            i += 1
+
+        return contributors
+
+    def _apply_enhanced_scoring(self, contributors, file_path):
+        """
+        应用增强的评分算法
+        
+        Args:
+            contributors: 基础贡献者信息
+            file_path: 文件路径
+            
+        Returns:
+            dict: 应用增强评分后的贡献者信息
+        """
+        from config import ENHANCED_CONTRIBUTOR_ANALYSIS
+        import math
+
+        if not contributors:
+            return contributors
+
+        algorithm = ENHANCED_CONTRIBUTOR_ANALYSIS.get(
+            "assignment_algorithm", "comprehensive"
+        )
+
+        for author, data in contributors.items():
+            base_score = data.get("score", 0)
+
+            # 基础提交分数
+            commit_score = data["recent_commits"] * ENHANCED_CONTRIBUTOR_ANALYSIS.get(
+                "base_commit_score", 1.0
+            )
+
+            # 行数权重分数
+            line_weight_score = 0
+            if ENHANCED_CONTRIBUTOR_ANALYSIS.get("line_weight_enabled", True):
+                line_weight_score = self._calculate_line_weight_score(data)
+
+            # 时间权重分数
+            time_weight_score = 0
+            if ENHANCED_CONTRIBUTOR_ANALYSIS.get("time_weight_enabled", True):
+                time_weight_score = self._calculate_time_weight_score(data)
+
+            # 一致性权重分数
+            consistency_score = 0
+            if (
+                ENHANCED_CONTRIBUTOR_ANALYSIS.get("consistency_weight_enabled", True)
+                and algorithm == "comprehensive"
+            ):
+                consistency_score = self._calculate_consistency_score(data)
+
+            # 综合评分
+            if algorithm == "simple":
+                final_score = commit_score
+            elif algorithm == "weighted":
+                final_score = commit_score + line_weight_score + time_weight_score
+            else:  # comprehensive
+                final_score = (
+                    commit_score
+                    + line_weight_score
+                    + time_weight_score
+                    + consistency_score
+                )
+
+            # 更新分数
+            data["enhanced_score"] = final_score
+            data["score"] = final_score  # 保持兼容性
+
+            # 保存详细评分信息
+            data["score_breakdown"] = {
+                "base_score": base_score,
+                "commit_score": commit_score,
+                "line_weight_score": line_weight_score,
+                "time_weight_score": time_weight_score,
+                "consistency_score": consistency_score,
+                "final_score": final_score,
+            }
+
+        return contributors
+
+    def _calculate_line_weight_score(self, contributor_data):
+        """计算行数权重分数"""
+        from config import ENHANCED_CONTRIBUTOR_ANALYSIS
+        import math
+
+        total_changes = contributor_data.get("total_changes", 0)
+        if total_changes == 0:
+            return 0
+
+        line_weight_factor = ENHANCED_CONTRIBUTOR_ANALYSIS.get(
+            "line_weight_factor", 0.3
+        )
+        algorithm = ENHANCED_CONTRIBUTOR_ANALYSIS.get(
+            "line_weight_algorithm", "logarithmic"
+        )
+
+        if algorithm == "logarithmic":
+            log_base = ENHANCED_CONTRIBUTOR_ANALYSIS.get("magnitude_scaling", {}).get(
+                "log_base", 10
+            )
+            score = line_weight_factor * math.log(total_changes + 1, log_base)
+        elif algorithm == "linear":
+            linear_factor = ENHANCED_CONTRIBUTOR_ANALYSIS.get(
+                "magnitude_scaling", {}
+            ).get("linear_factor", 0.01)
+            score = line_weight_factor * total_changes * linear_factor
+        elif algorithm == "sigmoid":
+            steepness = ENHANCED_CONTRIBUTOR_ANALYSIS.get("magnitude_scaling", {}).get(
+                "sigmoid_steepness", 0.1
+            )
+            score = line_weight_factor * (
+                2 / (1 + math.exp(-steepness * total_changes)) - 1
+            )
+        else:
+            # 默认使用对数算法
+            score = line_weight_factor * math.log(total_changes + 1, 10)
+
+        # 应用最大权重限制
+        max_multiplier = ENHANCED_CONTRIBUTOR_ANALYSIS.get(
+            "max_line_weight_multiplier", 3.0
+        )
+        score = min(score, max_multiplier)
+
+        return score
+
+    def _calculate_time_weight_score(self, contributor_data):
+        """计算时间权重分数"""
+        from config import ENHANCED_CONTRIBUTOR_ANALYSIS
+        import time
+        import math
+
+        commits_detail = contributor_data.get("commits_detail", [])
+        if not commits_detail:
+            return 0
+
+        current_time = time.time()
+        half_life_days = ENHANCED_CONTRIBUTOR_ANALYSIS.get("time_half_life_days", 180)
+        time_weight_factor = ENHANCED_CONTRIBUTOR_ANALYSIS.get(
+            "time_weight_factor", 0.4
+        )
+
+        total_time_weight = 0
+        half_life_seconds = half_life_days * 24 * 3600
+
+        for commit in commits_detail:
+            commit_time = commit.get("timestamp", current_time)
+            time_diff = current_time - commit_time
+
+            # 时间衰减权重：使用指数衰减
+            time_weight = math.exp(-time_diff / half_life_seconds)
+            change_weight = commit.get("total_changes", 0)
+
+            total_time_weight += time_weight * change_weight
+
+        return time_weight_factor * total_time_weight / 1000  # 归一化
+
+    def _calculate_consistency_score(self, contributor_data):
+        """计算一致性权重分数"""
+        from config import ENHANCED_CONTRIBUTOR_ANALYSIS
+        import statistics
+
+        commits_detail = contributor_data.get("commits_detail", [])
+        min_commits = ENHANCED_CONTRIBUTOR_ANALYSIS.get(
+            "min_commits_for_consistency", 3
+        )
+
+        if len(commits_detail) < min_commits:
+            return 0
+
+        # 计算提交时间间隔的一致性
+        timestamps = sorted([c.get("timestamp", 0) for c in commits_detail])
+        if len(timestamps) < 2:
+            return 0
+
+        intervals = []
+        for i in range(1, len(timestamps)):
+            interval = timestamps[i] - timestamps[i - 1]
+            intervals.append(interval)
+
+        if not intervals:
+            return 0
+
+        # 一致性评分：间隔越稳定，分数越高
+        try:
+            mean_interval = statistics.mean(intervals)
+            if mean_interval == 0:
+                return 0
+
+            # 使用变异系数衡量一致性
+            std_interval = statistics.stdev(intervals) if len(intervals) > 1 else 0
+            consistency_ratio = 1 - min(std_interval / mean_interval, 1)
+
+            consistency_factor = ENHANCED_CONTRIBUTOR_ANALYSIS.get(
+                "consistency_bonus_factor", 0.2
+            )
+            return consistency_factor * consistency_ratio * len(commits_detail)
+
+        except (statistics.StatisticsError, ZeroDivisionError):
+            return 0
+
+    def get_enhanced_contributors_batch(
+        self, file_paths, months=12, enable_line_analysis=True
+    ):
+        """
+        批量获取增强的贡献者信息
+        
+        Args:
+            file_paths: 文件路径列表
+            months: 分析时间范围
+            enable_line_analysis: 是否启用行数分析
+            
+        Returns:
+            dict: {文件路径: 增强贡献者信息}
+        """
+        from config import ENHANCED_CONTRIBUTOR_ANALYSIS
+
+        if not ENHANCED_CONTRIBUTOR_ANALYSIS.get("enabled", True):
+            # 回退到基础批量分析
+            return self.get_contributors_batch_optimized(
+                file_paths,
+                since_date=(datetime.now() - timedelta(days=months * 30)).strftime(
+                    "%Y-%m-%d"
+                ),
+            )
+
+        result = {}
+        batch_size = min(
+            len(file_paths), ENHANCED_CONTRIBUTOR_ANALYSIS.get("max_parallel_files", 50)
+        )
+
+        # 分批处理，避免命令行过长
+        for i in range(0, len(file_paths), batch_size):
+            batch_files = file_paths[i : i + batch_size]
+            batch_result = self._process_enhanced_batch(
+                batch_files, months, enable_line_analysis
+            )
+            result.update(batch_result)
+
+        return result
+
+    def _process_enhanced_batch(self, file_paths, months, enable_line_analysis):
+        """处理一批文件的增强分析"""
+        try:
+            cutoff_date = (datetime.now() - timedelta(days=months * 30)).strftime(
+                "%Y-%m-%d"
+            )
+            result = {}
+
+            if enable_line_analysis:
+                # 构建批量增强查询
+                files_arg = " ".join([f'"{path}"' for path in file_paths])
+                enhanced_cmd = (
+                    f'git log --since="{cutoff_date}" '
+                    f'--format="COMMIT:%H|%an|%at" --numstat -- {files_arg}'
+                )
+
+                enhanced_result = self.run_command(enhanced_cmd)
+                if enhanced_result:
+                    result = self._parse_enhanced_batch_log(enhanced_result, file_paths)
+
+            # 对于未处理的文件，使用基础分析
+            for file_path in file_paths:
+                if file_path not in result:
+                    result[file_path] = self.get_file_contributors_analysis(
+                        file_path, months
+                    )
+                else:
+                    # 应用增强评分
+                    result[file_path] = self._apply_enhanced_scoring(
+                        result[file_path], file_path
+                    )
+
+            return result
+
+        except Exception as e:
+            print(f"批量增强分析失败: {e}")
+            # 回退到基础批量分析
+            fallback_result = {}
+            for file_path in file_paths:
+                fallback_result[file_path] = self.get_file_contributors_analysis(
+                    file_path, months
+                )
+            return fallback_result
+
+    def _parse_enhanced_batch_log(self, git_output, file_paths):
+        """解析批量增强git log输出"""
+        contributors_by_file = {path: {} for path in file_paths}
+        current_commit = None
+
+        lines = git_output.split("\n")
+        i = 0
+
+        while i < len(lines):
+            line = lines[i].strip()
+
+            if not line:
+                i += 1
+                continue
+
+            # 解析提交信息
+            if line.startswith("COMMIT:"):
+                try:
+                    _, commit_info = line.split(":", 1)
+                    commit_hash, author, timestamp_str = commit_info.split("|")
+                    timestamp = int(timestamp_str)
+
+                    current_commit = {
+                        "hash": commit_hash,
+                        "author": author,
+                        "timestamp": timestamp,
+                    }
+                except ValueError:
+                    current_commit = None
+
+            # 解析文件变更统计
+            elif current_commit and "\t" in line:
+                try:
+                    parts = line.split("\t")
+                    if len(parts) >= 3:
+                        additions_str, deletions_str, filename = (
+                            parts[0],
+                            parts[1],
+                            parts[2],
+                        )
+
+                        # 只处理目标文件
+                        if filename in file_paths:
+                            additions = (
+                                0 if additions_str == "-" else int(additions_str)
+                            )
+                            deletions = (
+                                0 if deletions_str == "-" else int(deletions_str)
+                            )
+
+                            author = current_commit["author"]
+
+                            if author not in contributors_by_file[filename]:
+                                contributors_by_file[filename][author] = {
+                                    "total_commits": 0,
+                                    "recent_commits": 0,
+                                    "total_additions": 0,
+                                    "total_deletions": 0,
+                                    "total_changes": 0,
+                                    "commits_detail": [],
+                                    "score": 0,
+                                }
+
+                            contributor = contributors_by_file[filename][author]
+                            contributor["total_commits"] += 1
+                            contributor["recent_commits"] += 1
+                            contributor["total_additions"] += additions
+                            contributor["total_deletions"] += deletions
+                            contributor["total_changes"] += additions + deletions
+
+                            contributor["commits_detail"].append(
+                                {
+                                    "hash": current_commit["hash"],
+                                    "timestamp": current_commit["timestamp"],
+                                    "additions": additions,
+                                    "deletions": deletions,
+                                    "total_changes": additions + deletions,
+                                }
+                            )
+
+                except (ValueError, IndexError):
+                    pass
+
+            i += 1
+
+        return contributors_by_file
