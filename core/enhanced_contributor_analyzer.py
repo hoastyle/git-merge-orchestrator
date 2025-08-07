@@ -292,6 +292,28 @@ class EnhancedContributorAnalyzer:
 
         return filtered if filtered else contributors_dict  # 如果全部被过滤，返回原始数据
 
+    def _apply_score_threshold_relaxed(self, contributors_dict):
+        """应用更宽松的最低分数阈值过滤（用于批量决策）"""
+        if not contributors_dict:
+            return {}
+
+        # 使用更宽松的阈值，确保有足够的候选人
+        min_threshold = self.config.get("minimum_score_threshold", 0.1) * 0.5  # 降低50%
+        
+        # 如果所有贡献者的分数都很低，进一步放宽
+        all_scores = [info.get("enhanced_score", info.get("score", 0)) for info in contributors_dict.values()]
+        if all_scores and max(all_scores) < min_threshold:
+            min_threshold = min(all_scores) * 0.8  # 使用最低分数的80%
+            print(f"🔧 自动调整分数阈值为 {min_threshold:.3f} (原阈值过严)")
+
+        filtered = {}
+        for author, info in contributors_dict.items():
+            score = info.get("enhanced_score", info.get("score", 0))
+            if score >= min_threshold:
+                filtered[author] = info
+
+        return filtered if filtered else contributors_dict  # 如果全部被过滤，返回原始数据
+
     def _normalize_scores(self, contributors_dict):
         """标准化分数"""
         if not contributors_dict:
@@ -419,6 +441,104 @@ class EnhancedContributorAnalyzer:
         for file_path in file_paths:
             result[file_path] = self._fallback_to_basic_analysis(file_path, months)
         return result
+
+    def compute_final_decision_batch(self, files_contributors_dict, active_contributors_set=None):
+        """
+        批量预计算所有文件的最优分配决策
+        
+        Args:
+            files_contributors_dict: {文件路径: 贡献者信息} 字典
+            active_contributors_set: 活跃贡献者集合（如果未提供将自动获取）
+            
+        Returns:
+            dict: {文件路径: {'primary': (作者, 信息), 'alternatives': [...], 'reason': 理由}}
+        """
+        from datetime import datetime
+        
+        if not files_contributors_dict:
+            return {}
+            
+        start_time = datetime.now()
+        
+        # 获取活跃贡献者集合（如果未提供）
+        if active_contributors_set is None:
+            active_months = self.config.get("active_months", DEFAULT_ACTIVE_MONTHS)
+            active_contributors_set = set(self.git_ops.get_active_contributors(active_months))
+        
+        print(f"🎯 开始批量决策预计算: {len(files_contributors_dict)} 个文件...")
+        
+        decisions = {}
+        processed_count = 0
+        
+        for file_path, contributors in files_contributors_dict.items():
+            # 应用活跃度过滤（使用优化版本）
+            filtered_contributors = self._filter_active_contributors_optimized(
+                contributors, active_contributors_set
+            )
+            
+            # 如果活跃度过滤后没有候选人，使用原始数据
+            if not filtered_contributors:
+                print(f"⚠️ 文件 {file_path} 无活跃贡献者，使用所有贡献者")
+                filtered_contributors = contributors
+            
+            # 应用分数阈值过滤（使用更宽松的阈值）
+            threshold_filtered = self._apply_score_threshold_relaxed(filtered_contributors)
+            
+            # 如果阈值过滤后没有候选人，使用过滤前的数据
+            if not threshold_filtered:
+                threshold_filtered = filtered_contributors
+            
+            # 标准化分数
+            normalized_contributors = self._normalize_scores(threshold_filtered)
+            
+            # 获取排序后的候选人列表
+            ranking = self.get_contributor_ranking(normalized_contributors)
+            
+            if ranking:
+                primary_author, primary_info = ranking[0]
+                alternatives = ranking[1:5]  # 保留前5个备选
+                reason = self._generate_assignment_reason(primary_author, primary_info)
+                
+                decisions[file_path] = {
+                    'primary': (primary_author, primary_info),
+                    'alternatives': alternatives,
+                    'reason': reason,
+                    'all_candidates': len(ranking),
+                    'active_candidates': len([r for r in ranking if r[1].get('is_active', True)])
+                }
+            else:
+                decisions[file_path] = {
+                    'primary': None,
+                    'alternatives': [],
+                    'reason': '无可用贡献者',
+                    'all_candidates': 0,
+                    'active_candidates': 0
+                }
+            
+            processed_count += 1
+            
+            # 进度显示（每10%显示一次）
+            if processed_count % max(1, len(files_contributors_dict) // 10) == 0:
+                progress = (processed_count / len(files_contributors_dict)) * 100
+                elapsed = (datetime.now() - start_time).total_seconds()
+                print(f"🔄 决策计算进度: {processed_count}/{len(files_contributors_dict)} ({progress:.1f}%) - 用时 {elapsed:.1f}s")
+        
+        total_time = (datetime.now() - start_time).total_seconds()
+        valid_decisions = len([d for d in decisions.values() if d['primary'] is not None])
+        
+        print(f"✅ 批量决策计算完成: {total_time:.2f}s")
+        print(f"📊 决策统计: {valid_decisions}/{len(decisions)} 个文件有可分配对象 ({valid_decisions/len(decisions)*100:.1f}%)")
+        
+        # 保存决策计算性能日志
+        self._save_decision_performance_log({
+            'decision_calculation_time': total_time,
+            'files_processed': len(files_contributors_dict),
+            'valid_decisions': valid_decisions,
+            'avg_decision_time_ms': (total_time / len(files_contributors_dict)) * 1000,
+            'active_contributors_count': len(active_contributors_set)
+        })
+        
+        return decisions
 
     def get_analysis_statistics(self, contributors_dict):
         """获取分析统计信息"""
@@ -630,14 +750,76 @@ class EnhancedContributorAnalyzer:
 
         # 使用预获取的集合进行快速过滤
         filtered = {}
+        inactive_count = 0
+        
         for author, info in contributors_dict.items():
             if author in active_contributors_set:
                 info["is_active"] = True
                 filtered[author] = info
             else:
-                # 标记为不活跃但保留数据
+                # 标记为不活跃
                 info["is_active"] = False
-                if self.config.get("include_inactive", False):
+                inactive_count += 1
+                # 在批量决策中，如果活跃贡献者太少，包含不活跃的贡献者
+                include_inactive = self.config.get("include_inactive", False)
+                if include_inactive or len(filtered) < 2:  # 确保至少有一些候选人
                     filtered[author] = info
 
+        # 如果过滤后候选人太少，包含所有贡献者
+        if len(filtered) < max(1, len(contributors_dict) * 0.3):  # 至少保留30%的候选人
+            print(f"🔧 活跃度过滤过严，保留所有 {len(contributors_dict)} 位贡献者 (活跃:{len(filtered)}, 不活跃:{inactive_count})")
+            return contributors_dict
+
         return filtered
+        
+    def _save_decision_performance_log(self, perf_data):
+        """保存决策计算性能详细日志"""
+        try:
+            import json
+            from pathlib import Path
+            from datetime import datetime
+            
+            # 设置日志文件路径
+            if hasattr(self.git_ops, 'repo_path'):
+                repo_path = Path(self.git_ops.repo_path)
+            else:
+                repo_path = Path(".")
+                
+            log_file = repo_path / ".merge_work" / "decision_performance.json"
+            log_file.parent.mkdir(exist_ok=True)
+            
+            # 构建日志条目
+            log_entry = {
+                'timestamp': datetime.now().isoformat(),
+                'component': 'EnhancedContributorAnalyzer.compute_final_decision_batch',
+                'version': '2.3',
+                'performance_data': perf_data,
+                'efficiency_metrics': {
+                    'decisions_per_second': perf_data.get('files_processed', 0) / max(perf_data.get('decision_calculation_time', 1), 0.001),
+                    'avg_decision_time_ms': perf_data.get('avg_decision_time_ms', 0),
+                    'success_rate': perf_data.get('valid_decisions', 0) / max(perf_data.get('files_processed', 1), 1) * 100
+                }
+            }
+            
+            # 加载现有日志
+            logs = []
+            if log_file.exists():
+                try:
+                    with open(log_file, 'r', encoding='utf-8') as f:
+                        logs = json.load(f)
+                except:
+                    logs = []
+            
+            # 添加新日志
+            logs.append(log_entry)
+            
+            # 保持最近20条记录
+            if len(logs) > 20:
+                logs = logs[-20:]
+                
+            # 写入文件
+            with open(log_file, 'w', encoding='utf-8') as f:
+                json.dump(logs, f, indent=2, ensure_ascii=False)
+                
+        except Exception as e:
+            print(f"⚠️ 保存决策性能日志失败: {e}")

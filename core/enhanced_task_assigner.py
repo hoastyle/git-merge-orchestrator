@@ -156,8 +156,16 @@ class EnhancedTaskAssigner:
             print("❌ 无有效文件路径")
             return 0, 0, {}
 
-        # 批量分析文件贡献者
+        # 导入datetime模块
         from datetime import datetime
+        
+        # 一次性获取活跃贡献者列表（避免N+1查询）
+        active_contributors_start = datetime.now()
+        active_contributors_set = set(active_contributors)
+        active_contributors_time = (datetime.now() - active_contributors_start).total_seconds()
+        print(f"⚡ 活跃贡献者列表准备: {active_contributors_time:.3f}s ({len(active_contributors_set)} 人)")
+
+        # 阶段1: 批量分析文件贡献者
         analysis_start = datetime.now()
         print(f"🔍 正在进行批量增强贡献者分析... ({len(file_paths)} 个文件)")
         print("⚡ 启用特性: 行数权重、时间衰减、一致性评分")
@@ -169,11 +177,33 @@ class EnhancedTaskAssigner:
         analysis_time = (datetime.now() - analysis_start).total_seconds()
         print(f"✅ 增强贡献者分析完成: {analysis_time:.2f}s ({analysis_time/len(file_paths)*1000:.1f}ms/文件)")
 
-        # 执行文件分配
+        # 阶段2: 批量决策预计算
+        decision_start = datetime.now()
+        print(f"🎯 正在进行批量决策预计算...")
+        
+        decisions = self.enhanced_analyzer.compute_final_decision_batch(
+            batch_contributors, active_contributors_set
+        )
+        
+        decision_time = (datetime.now() - decision_start).total_seconds()
+        print(f"✅ 批量决策预计算完成: {decision_time:.2f}s")
+
+        # 阶段3: 负载均衡分配
         assignment_start = datetime.now()
-        print(f"👥 开始文件分配逐钀...")
+        print(f"⚖️ 开始负载均衡分配...")
+        
+        final_assignments, person_workload, load_balance_stats = self.apply_load_balanced_assignment(
+            decisions, exclude_authors, max_tasks_per_person
+        )
+        
+        assignment_time = (datetime.now() - assignment_start).total_seconds()
+        print(f"✅ 负载均衡分配完成: {assignment_time:.2f}s")
+
+        # 阶段4: 应用分配结果到文件对象
+        application_start = datetime.now()
         success_count = 0
         failed_count = 0
+        
         assignment_stats = {
             "total_files": len(files),
             "analyzed_files": len(batch_contributors),
@@ -184,77 +214,48 @@ class EnhancedTaskAssigner:
             ),
         }
 
-        # 跟踪每人的任务数
-        person_task_count = {}
-
         for file_info in files:
             file_path = file_info.get("path", "")
             if not file_path:
                 failed_count += 1
                 continue
-
-            contributors = batch_contributors.get(file_path, {})
-
-            # 获取最佳分配对象
-            best_author, author_info, reason = self.enhanced_analyzer.get_best_assignee(
-                contributors, exclude_inactive=True
-            )
-
-            if not best_author or best_author in exclude_authors:
-                # 尝试回退分配
-                if include_fallback:
-                    best_author, reason = self._fallback_assignment(
-                        file_path, exclude_authors
-                    )
-
-                if not best_author:
-                    file_info["assignee"] = "未分配"
-                    file_info["status"] = "pending"
-                    file_info["assignment_reason"] = "无可用贡献者"
-                    failed_count += 1
-                    continue
-
-            # 检查任务数量限制
-            current_tasks = person_task_count.get(best_author, 0)
-            if current_tasks >= max_tasks_per_person:
-                # 寻找替代分配
-                alternative_assigned = self._find_alternative_assignee(
-                    contributors,
-                    exclude_authors,
-                    person_task_count,
-                    max_tasks_per_person,
-                )
-
-                if alternative_assigned:
-                    best_author, reason = alternative_assigned
+                
+            if file_path in final_assignments:
+                assigned_author, assignment_reason = final_assignments[file_path]
+                
+                if assigned_author:
+                    file_info["assignee"] = assigned_author
+                    file_info["status"] = "assigned"
+                    file_info["assignment_reason"] = assignment_reason
+                    assignment_stats["assignment_reasons"][file_path] = assignment_reason
+                    success_count += 1
                 else:
                     file_info["assignee"] = "未分配"
                     file_info["status"] = "pending"
-                    file_info["assignment_reason"] = "超出任务限额"
+                    file_info["assignment_reason"] = assignment_reason
                     failed_count += 1
-                    continue
-
-            # 执行分配
-            file_info["assignee"] = best_author
-            file_info["status"] = "assigned"
-            file_info["assignment_reason"] = reason
-
-            # 更新统计
-            person_task_count[best_author] = person_task_count.get(best_author, 0) + 1
-            assignment_stats["assignment_reasons"][file_path] = reason
-            success_count += 1
-
-        # 分配完成统计和性能记录
-        elapsed = (datetime.now() - start_time).total_seconds()
-        assignment_time = (datetime.now() - assignment_start).total_seconds()
+            else:
+                file_info["assignee"] = "未分配"
+                file_info["status"] = "pending"
+                file_info["assignment_reason"] = "分配处理异常"
+                failed_count += 1
         
-        # 构建详细性能记录
+        application_time = (datetime.now() - application_start).total_seconds()
+        print(f"✅ 分配结果应用完成: {application_time:.2f}s")
+
+        # 总体统计和性能记录
+        elapsed = (datetime.now() - start_time).total_seconds()
+        
+        # 构建详细性能记录（新架构的详细分解）
         perf_log = {
-            # 主要阶段时间
+            # 新架构的详细阶段时间
             'analysis_phase_time': analysis_time,
+            'decision_phase_time': decision_time,
             'assignment_phase_time': assignment_time, 
+            'application_phase_time': application_time,
+            'active_contributors_prep_time': active_contributors_time,
             'total_execution_time': elapsed,
-            'other_processing_time': elapsed - analysis_time - assignment_time,
+            'other_processing_time': elapsed - analysis_time - decision_time - assignment_time - application_time,
             
             # 文件处理统计
             'total_files': len(files),
@@ -262,49 +263,67 @@ class EnhancedTaskAssigner:
             'success_count': success_count,
             'failed_count': failed_count,
             
-            # 贡献者统计
-            'contributors_count': len(person_task_count),
-            'workload_distribution': dict(person_task_count),
+            # 贡献者统计（使用新的工作负载分布）
+            'contributors_count': len(person_workload),
+            'workload_distribution': dict(person_workload),
             
-            # 性能指标
-            'avg_time_per_file_ms': (assignment_time / max(success_count + failed_count, 1)) * 1000,
-            'analysis_to_assignment_ratio': assignment_time / analysis_time if analysis_time > 0 else 0,
-            'success_rate': success_count / max(success_count + failed_count, 1) * 100
+            # 新架构性能指标
+            'avg_time_per_file_ms': (elapsed / max(success_count + failed_count, 1)) * 1000,
+            'decision_to_analysis_ratio': decision_time / analysis_time if analysis_time > 0 else 0,
+            'assignment_to_decision_ratio': assignment_time / decision_time if decision_time > 0 else 0,
+            'success_rate': success_count / max(success_count + failed_count, 1) * 100,
+            
+            # 负载均衡统计
+            'load_balance_stats': load_balance_stats,
+            'architecture_version': '2.3_optimized'
         }
         
         # 保存性能日志
         self._save_enhanced_performance_log(perf_log)
 
-        print(f"\n✅ 增强任务分配完成!")
+        print(f"\n✅ 增强任务分配完成 (新优化架构v2.3)!")
         print(f"📊 分配统计: 成功 {success_count}, 失败 {failed_count}, 用时 {elapsed:.2f}s")
-        print(f"👥 涉及 {len(person_task_count)} 位贡献者")
+        print(f"👥 涉及 {len(person_workload)} 位贡献者")
         
-        # 性能分析提示 - 帮助用户理解性能瓶颈
-        other_time = elapsed - analysis_time - assignment_time
-        if elapsed > 20:
+        # 新架构详细性能分析
+        if elapsed > 10:
             print(f"\n🔍 详细性能分析 (总时间 {elapsed:.1f}s):")
             print(f"  🧪 分析阶段: {analysis_time:.1f}s ({analysis_time/elapsed*100:.1f}%)")
-            print(f"  👥 分配阶段: {assignment_time:.1f}s ({assignment_time/elapsed*100:.1f}%)")
-            print(f"  📦 其他处理: {other_time:.1f}s ({other_time/elapsed*100:.1f}%)")
+            print(f"  🎯 决策计算: {decision_time:.1f}s ({decision_time/elapsed*100:.1f}%)")
+            print(f"  ⚖️ 负载均衡: {assignment_time:.1f}s ({assignment_time/elapsed*100:.1f}%)")
+            print(f"  📋 结果应用: {application_time:.1f}s ({application_time/elapsed*100:.1f}%)")
             
-            # 性能建议
-            if assignment_time > analysis_time * 1.5:
-                print(f"  💡 建议: 分配逻辑耗时较多，可考虑优化算法")
-            if other_time > 5:
-                print(f"  💡 建议: 其他处理耗时较多 ({other_time:.1f}s)，检查I/O操作或缓存")
-            if perf_log['avg_time_per_file_ms'] > 50:
-                print(f"  💡 建议: 平均文件处理时间较长 ({perf_log['avg_time_per_file_ms']:.1f}ms), 可考虑批量优化")
+            other_time = perf_log['other_processing_time']
+            if other_time > 0.5:
+                print(f"  📦 其他处理: {other_time:.1f}s ({other_time/elapsed*100:.1f}%)")
+            
+            # 新架构性能建议
+            if decision_time > analysis_time:
+                print(f"  💡 建议: 决策计算耗时较多，可考虑进一步缓存优化")
+            if assignment_time > decision_time * 2:
+                print(f"  💡 建议: 负载均衡算法可进一步优化")
+            if perf_log['avg_time_per_file_ms'] > 20:
+                print(f"  💡 建议: 平均文件处理时间 ({perf_log['avg_time_per_file_ms']:.1f}ms) 仍有优化空间")
+            else:
+                print(f"  ✨ 性能表现: 平均文件处理时间 {perf_log['avg_time_per_file_ms']:.1f}ms (优秀)")
 
-        # 显示负载分布
-        self._show_workload_distribution(person_task_count)
+        # 显示负载分布（使用新的数据源）
+        self._show_workload_distribution(person_workload)
 
         assignment_stats.update(
             {
                 "success_count": success_count,
                 "failed_count": failed_count,
                 "elapsed_time": elapsed,
-                "contributors_involved": len(person_task_count),
-                "workload_distribution": person_task_count,
+                "contributors_involved": len(person_workload),
+                "workload_distribution": person_workload,
+                "architecture_version": "2.3_optimized",
+                "performance_breakdown": {
+                    "analysis_time": analysis_time,
+                    "decision_time": decision_time,
+                    "assignment_time": assignment_time,
+                    "application_time": application_time
+                }
             }
         )
 
@@ -429,6 +448,126 @@ class EnhancedTaskAssigner:
         )
 
         return success_count, failed_count, assignment_stats
+
+    def apply_load_balanced_assignment(self, decisions, exclude_authors=None, max_tasks_per_person=None):
+        """
+        应用负载均衡的智能分配
+        
+        Args:
+            decisions: 批量决策结果字典
+            exclude_authors: 排除的作者列表
+            max_tasks_per_person: 每人最大任务数
+            
+        Returns:
+            tuple: (最终分配结果, 工作负载分布, 分配统计)
+        """
+        from datetime import datetime
+        
+        exclude_authors = exclude_authors or []
+        max_tasks_per_person = max_tasks_per_person or DEFAULT_MAX_TASKS_PER_PERSON
+        
+        start_time = datetime.now()
+        print(f"⚖️ 开始负载均衡分配: {len(decisions)} 个文件...")
+        
+        person_workload = {}
+        final_assignments = {}
+        assignment_stats = {
+            'total_files': len(decisions),
+            'primary_assignments': 0,
+            'alternative_assignments': 0,
+            'failed_assignments': 0,
+            'exclude_count': 0,
+            'overload_count': 0
+        }
+        
+        # 创建按优先级排序的文件列表（基于主要候选人的分数）
+        prioritized_files = []
+        for file_path, decision in decisions.items():
+            if decision['primary']:
+                primary_score = decision['primary'][1].get('enhanced_score', 0)
+                prioritized_files.append((file_path, decision, primary_score))
+            else:
+                # 无可分配对象的文件放在最后
+                prioritized_files.append((file_path, decision, -1))
+        
+        # 按分数从高到低排序
+        prioritized_files.sort(key=lambda x: x[2], reverse=True)
+        
+        print(f"📊 优先级排序完成: {len([f for f in prioritized_files if f[2] > 0])} 个文件有可分配对象")
+        
+        # 执行智能分配
+        processed_count = 0
+        for file_path, decision, score in prioritized_files:
+            assigned = False
+            assignment_reason = None
+            selected_author = None
+            
+            # 尝试主要候选人
+            if decision['primary']:
+                primary_author, primary_info = decision['primary']
+                
+                if primary_author in exclude_authors:
+                    assignment_stats['exclude_count'] += 1
+                elif person_workload.get(primary_author, 0) >= max_tasks_per_person:
+                    assignment_stats['overload_count'] += 1
+                else:
+                    # 可以使用主要候选人
+                    selected_author = primary_author
+                    assignment_reason = decision['reason']
+                    assignment_stats['primary_assignments'] += 1
+                    assigned = True
+            
+            # 如果主要候选人不可用，尝试备选候选人
+            if not assigned and decision['alternatives']:
+                for alt_author, alt_info in decision['alternatives']:
+                    if alt_author not in exclude_authors and person_workload.get(alt_author, 0) < max_tasks_per_person:
+                        selected_author = alt_author
+                        assignment_reason = self.enhanced_analyzer._generate_assignment_reason(alt_author, alt_info) + " (负载均衡)"
+                        assignment_stats['alternative_assignments'] += 1
+                        assigned = True
+                        break
+            
+            # 记录分配结果
+            if assigned:
+                final_assignments[file_path] = (selected_author, assignment_reason)
+                person_workload[selected_author] = person_workload.get(selected_author, 0) + 1
+            else:
+                # 尝试最后的回退分配 - 使用任务最少的贡献者
+                fallback_author = self._find_least_loaded_contributor(person_workload, max_tasks_per_person)
+                if fallback_author:
+                    final_assignments[file_path] = (fallback_author, "负载均衡回退分配")
+                    person_workload[fallback_author] = person_workload.get(fallback_author, 0) + 1
+                    assignment_stats['alternative_assignments'] += 1
+                    assigned = True
+                else:
+                    final_assignments[file_path] = (None, decision.get('reason', '无可用分配对象'))
+                    assignment_stats['failed_assignments'] += 1
+            
+            processed_count += 1
+            
+            # 进度显示（每10%显示一次）
+            if processed_count % max(1, len(prioritized_files) // 10) == 0:
+                progress = (processed_count / len(prioritized_files)) * 100
+                elapsed = (datetime.now() - start_time).total_seconds()
+                print(f"🔄 负载均衡进度: {processed_count}/{len(prioritized_files)} ({progress:.1f}%) - 用时 {elapsed:.1f}s")
+        
+        total_time = (datetime.now() - start_time).total_seconds()
+        
+        print(f"✅ 负载均衡分配完成: {total_time:.2f}s")
+        print(f"📊 分配结果: 主要 {assignment_stats['primary_assignments']}, 备选 {assignment_stats['alternative_assignments']}, 失败 {assignment_stats['failed_assignments']}")
+        print(f"👥 涉及 {len(person_workload)} 位贡献者")
+        
+        # 保存负载均衡性能日志
+        self._save_load_balance_performance_log({
+            'load_balance_time': total_time,
+            'files_processed': len(decisions),
+            'assignment_stats': assignment_stats,
+            'workload_distribution': dict(person_workload),
+            'avg_assignment_time_ms': (total_time / len(decisions)) * 1000,
+            'load_balance_efficiency': (assignment_stats['primary_assignments'] + assignment_stats['alternative_assignments']) / len(decisions) * 100
+        })
+        
+        return final_assignments, person_workload, assignment_stats
 
     def _merge_group_contributors(self, batch_contributors):
         """合并组内文件的贡献者统计"""
@@ -704,3 +843,112 @@ class EnhancedTaskAssigner:
             insights.append("性能表现良好")
             
         return insights
+    
+    def _save_load_balance_performance_log(self, perf_data):
+        """保存负载均衡性能详细日志"""
+        try:
+            import json
+            from pathlib import Path
+            from datetime import datetime
+            
+            # 设置日志文件路径
+            if hasattr(self.git_ops, 'repo_path'):
+                repo_path = Path(self.git_ops.repo_path)
+            else:
+                repo_path = Path(".")
+                
+            log_file = repo_path / ".merge_work" / "load_balance_performance.json"
+            log_file.parent.mkdir(exist_ok=True)
+            
+            # 构建日志条目
+            log_entry = {
+                'timestamp': datetime.now().isoformat(),
+                'component': 'EnhancedTaskAssigner.apply_load_balanced_assignment',
+                'version': '2.3',
+                'performance_data': perf_data,
+                'efficiency_insights': self._generate_load_balance_insights(perf_data)
+            }
+            
+            # 加载现有日志
+            logs = []
+            if log_file.exists():
+                try:
+                    with open(log_file, 'r', encoding='utf-8') as f:
+                        logs = json.load(f)
+                except:
+                    logs = []
+            
+            # 添加新日志
+            logs.append(log_entry)
+            
+            # 保持最近20条记录
+            if len(logs) > 20:
+                logs = logs[-20:]
+                
+            # 写入文件
+            with open(log_file, 'w', encoding='utf-8') as f:
+                json.dump(logs, f, indent=2, ensure_ascii=False)
+                
+        except Exception as e:
+            print(f"⚠️ 保存负载均衡性能日志失败: {e}")
+    
+    def _generate_load_balance_insights(self, perf_data):
+        """生成负载均衡性能洞察"""
+        insights = []
+        
+        stats = perf_data.get('assignment_stats', {})
+        efficiency = perf_data.get('load_balance_efficiency', 0)
+        workload = perf_data.get('workload_distribution', {})
+        
+        # 分配效率分析
+        if efficiency >= 95:
+            insights.append("分配效率优秀")
+        elif efficiency >= 80:
+            insights.append("分配效率良好")
+        else:
+            insights.append(f"分配效率需要改善 ({efficiency:.1f}%)")
+        
+        # 负载均衡分析
+        if workload:
+            workload_values = list(workload.values())
+            max_load = max(workload_values)
+            min_load = min(workload_values)
+            avg_load = sum(workload_values) / len(workload_values)
+            
+            if max_load - min_load <= 2:
+                insights.append("负载分布非常均衡")
+            elif max_load - min_load <= 5:
+                insights.append("负载分布较为均衡")
+            else:
+                insights.append(f"负载分布不均衡 (最大{max_load}vs最小{min_load})")
+        
+        # 性能分析
+        avg_time = perf_data.get('avg_assignment_time_ms', 0)
+        if avg_time < 1:
+            insights.append("分配性能优秀")
+        elif avg_time < 5:
+            insights.append("分配性能良好")
+        else:
+            insights.append(f"分配性能需优化 ({avg_time:.1f}ms/文件)")
+        
+        return insights
+    
+    def _find_least_loaded_contributor(self, person_workload, max_tasks_per_person):
+        """找到当前负载最轻的贡献者作为回退分配目标"""
+        # 获取所有活跃贡献者
+        active_contributors = self.git_ops.get_active_contributors(DEFAULT_ACTIVE_MONTHS)
+        
+        if not active_contributors:
+            return None
+        
+        # 找到负载最轻且未超过限制的贡献者
+        min_workload = float('inf')
+        least_loaded = None
+        
+        for contributor in active_contributors:
+            current_load = person_workload.get(contributor, 0)
+            if current_load < max_tasks_per_person and current_load < min_workload:
+                min_workload = current_load
+                least_loaded = contributor
+        
+        return least_loaded
