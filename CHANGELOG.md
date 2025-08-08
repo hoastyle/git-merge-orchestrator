@@ -160,7 +160,7 @@ ENHANCED_CONTRIBUTOR_ANALYSIS = {
 ### 🧪 测试基础设施
 
 #### 完整的测试环境
-- **git-merge-orchestrator-test** 独立测试目录
+- **test-environment** 测试环境子模块
 - 测试仓库创建工具：支持4种复杂度类型
 - 8种预定义测试场景：合并冲突、文件级处理、负载均衡等
 - 测试数据生成器和清理工具

@@ -2,13 +2,13 @@
 
 ## 📋 测试目录概述
 
-Git Merge Orchestrator 提供了一个独立的测试环境目录 `git-merge-orchestrator-test`，用于全面测试各种合并场景，确保工具在不同情况下的稳定性和正确性。
+Git Merge Orchestrator 提供了一个测试环境子模块 `test-environment`，用于全面测试各种合并场景，确保工具在不同情况下的稳定性和正确性。
 
 ## 🏗️ 测试环境架构
 
 ### 目录结构
 ```
-../git-merge-orchestrator-test/
+test-environment/
 ├── README.md                            # 测试使用指南
 ├── test-scripts/                        # 测试工具脚本
 │   ├── create_test_repo.py              # 测试仓库创建工具
@@ -43,8 +43,8 @@ Git Merge Orchestrator 提供了一个独立的测试环境目录 `git-merge-orc
 # 确保您在主项目目录
 cd /home/howie/Workspace/Project/tools/git-merge-orchestrator
 
-# 切换到测试目录
-cd ../git-merge-orchestrator-test
+# 切换到测试环境子模块
+cd test-environment
 
 # 检查测试环境
 ls -la
@@ -494,7 +494,7 @@ set -e
 echo "🚀 CI测试开始..."
 
 # 进入测试目录
-cd git-merge-orchestrator-test
+cd test-environment
 
 # 设置关键测试场景
 python test-scripts/setup_scenarios.py --scenario merge-conflicts
@@ -505,7 +505,7 @@ cd ../git-merge-orchestrator
 python run_tests.py --health
 
 # 基础功能测试
-cd ../git-merge-orchestrator-test/test-repos/merge-conflicts-test
+cd test-environment/test-repos/merge-conflicts-test
 timeout 60s python ../../git-merge-orchestrator/main.py feature-1 master --auto-mode
 
 echo "✅ CI测试完成"
@@ -518,7 +518,7 @@ echo "✅ CI测试完成"
 #### 1. 场景设置失败
 ```bash
 # 问题：权限不足
-sudo chown -R $USER:$USER ../git-merge-orchestrator-test
+sudo chown -R $USER:$USER test-environment
 
 # 问题：Git配置缺失
 git config --global user.name "Test User"

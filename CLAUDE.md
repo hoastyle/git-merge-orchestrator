@@ -402,7 +402,7 @@ Code should support both processing modes:
 * 使用`python run_tests.py`进行测试
 * 重要功能变更需要进行健康检查：`python run_tests.py --health`
 * 性能相关变更需要运行：`python test_performance_optimization.py`
-* 利用git-merge-orchestrator-test目录进行完整测试
+* 利用test-environment子模块进行完整测试
 
 ## 项目状态
 **版本**: v2.3 (生产就绪)

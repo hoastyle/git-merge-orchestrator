@@ -127,7 +127,7 @@ git-merge-orchestrator/                    # 主项目目录
 ## 🧪 测试环境
 
 ```
-../git-merge-orchestrator-test/           # 🆕 独立测试环境（已配置Git管理）
+test-environment/                         # 🆕 测试环境子模块（Git Submodule管理）
 ├── 📁 核心目录
 │   ├── test-scripts/                     # 测试脚本集合
 │   │   ├── create_test_repo.py           # 测试仓库创建工具
@@ -135,7 +135,7 @@ git-merge-orchestrator/                    # 主项目目录
 │   │   ├── integration_tests.py         # 🆕 集成测试套件
 │   │   ├── benchmark.py                 # 🆕 性能基准测试
 │   │   ├── cleanup.py                   # 清理管理工具
-│   │   └── verify_results.py            # 🆕 结果验证工具
+│   │   └── test_data_generator.py       # 🆕 测试数据生成器
 │   ├── test-data/                       # 静态测试数据
 │   ├── test-repos/                      # 动态测试仓库（被Git忽略）
 │   ├── logs/                            # 测试日志（被Git忽略）
@@ -253,8 +253,8 @@ python main.py feature-branch main
 
 ### 测试环境使用
 ```bash
-# 进入测试目录
-cd ../git-merge-orchestrator-test
+# 进入测试环境子模块
+cd test-environment
 
 # 快速测试（推荐）
 ./batch_test.sh --quick
@@ -433,7 +433,7 @@ python run_tests.py --health
    - `utils/` - 工具函数
 
 3. **测试环境熟悉**
-   - 进入 `../git-merge-orchestrator-test/`
+   - 进入 `test-environment/`
    - 运行 `./batch_test.sh --quick` 了解测试流程
    - 查看 `TESTING_GUIDE.md` 了解测试细节
 
@@ -470,7 +470,7 @@ Co-Authored-By: [Your Name] <your.email@example.com>"
 python run_tests.py --health
 
 # 测试环境验证
-cd ../git-merge-orchestrator-test
+cd test-environment
 ./git-maintenance.sh health-check
 
 # 详细调试
@@ -484,7 +484,8 @@ python main.py feature-branch main
 python run_tests.py --full           # 完整测试
 python main.py --help               # 查看帮助
 
-# 测试环境  
+# 测试环境（子模块）
+cd test-environment
 ./batch_test.sh --quick             # 快速测试
 ./git-maintenance.sh status         # 状态检查
 ```
