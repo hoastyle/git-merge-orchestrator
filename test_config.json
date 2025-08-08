@@ -1,0 +1,225 @@
+{
+  "test_configuration": {
+    "version": "1.0",
+    "updated": "2025-08-08",
+    "description": "Git Merge Orchestrator 统一测试配置"
+  },
+  
+  "test_modes": {
+    "quick": {
+      "description": "快速测试模式 (< 30秒)",
+      "timeout_seconds": 30,
+      "include_categories": ["health"],
+      "parallel_execution": true,
+      "skip_long_running_tests": true
+    },
+    "full": {
+      "description": "完整测试套件 (10-15分钟)",
+      "timeout_seconds": 900,
+      "include_categories": ["health", "integration", "performance", "scenario"],
+      "parallel_execution": false,
+      "skip_long_running_tests": false
+    },
+    "core_only": {
+      "description": "仅主项目测试 (降级模式)",
+      "timeout_seconds": 600,
+      "include_categories": ["health", "integration", "mock"],
+      "parallel_execution": true,
+      "skip_long_running_tests": false
+    },
+    "scenario": {
+      "description": "指定场景测试 (2-5分钟)",
+      "timeout_seconds": 300,
+      "include_categories": ["scenario"],
+      "parallel_execution": true,
+      "skip_long_running_tests": true
+    }
+  },
+  
+  "test_categories": {
+    "health": {
+      "description": "健康检查测试",
+      "priority": "high",
+      "timeout_seconds": 60,
+      "retry_count": 1,
+      "tests": [
+        "主项目健康检查",
+        "test-environment健康检查",
+        "环境依赖检查"
+      ]
+    },
+    "integration": {
+      "description": "集成测试",
+      "priority": "high", 
+      "timeout_seconds": 300,
+      "retry_count": 0,
+      "tests": [
+        "主项目完整测试",
+        "模块导入测试",
+        "Git操作测试",
+        "合并策略测试"
+      ]
+    },
+    "performance": {
+      "description": "性能测试",
+      "priority": "medium",
+      "timeout_seconds": 300,
+      "retry_count": 0,
+      "tests": [
+        "v2.3性能优化测试",
+        "批量处理性能测试",
+        "内存使用测试"
+      ]
+    },
+    "scenario": {
+      "description": "场景测试",
+      "priority": "medium",
+      "timeout_seconds": 600,
+      "retry_count": 0,
+      "tests": [
+        "文件级处理场景",
+        "大规模仓库场景",
+        "合并冲突场景",
+        "负载均衡场景"
+      ]
+    },
+    "mock": {
+      "description": "模拟测试",
+      "priority": "low",
+      "timeout_seconds": 60,
+      "retry_count": 0,
+      "tests": [
+        "内置模拟测试",
+        "基础功能模拟"
+      ]
+    }
+  },
+  
+  "test_environments": {
+    "main_tests": {
+      "path": "tests/",
+      "runner_script": "run_tests.py",
+      "required": true,
+      "health_check_command": ["python", "run_tests.py", "--health"],
+      "full_test_command": ["python", "run_tests.py", "--full"]
+    },
+    "test_environment": {
+      "path": "test-environment/",
+      "runner_script": "batch_test.sh",
+      "required": false,
+      "health_check_command": ["./batch_test.sh", "--health-only"],
+      "full_test_command": ["./batch_test.sh", "--quick"]
+    }
+  },
+  
+  "scenario_definitions": {
+    "config": {
+      "description": "配置管理测试",
+      "main_test_category": "config",
+      "test_environment_scenarios": ["basic_configuration"],
+      "expected_duration_seconds": 60
+    },
+    "performance": {
+      "description": "性能相关测试",
+      "main_test_category": "performance", 
+      "test_environment_scenarios": ["large_scale_performance"],
+      "expected_duration_seconds": 180
+    },
+    "file_level": {
+      "description": "文件级处理测试",
+      "main_test_category": "integration",
+      "test_environment_scenarios": ["file_level_processing"],
+      "expected_duration_seconds": 120
+    },
+    "git": {
+      "description": "Git操作测试",
+      "main_test_category": "deployment",
+      "test_environment_scenarios": ["branch_management"],
+      "expected_duration_seconds": 90
+    },
+    "merge": {
+      "description": "合并策略测试", 
+      "main_test_category": "merge_strategies",
+      "test_environment_scenarios": ["merge_conflicts"],
+      "expected_duration_seconds": 150
+    }
+  },
+  
+  "environment_requirements": {
+    "python": {
+      "minimum_version": "3.7",
+      "required_modules": [
+        "pathlib",
+        "subprocess",
+        "json",
+        "datetime"
+      ]
+    },
+    "git": {
+      "minimum_version": "2.0",
+      "required_commands": [
+        "git --version",
+        "git status",
+        "git log"
+      ]
+    },
+    "system": {
+      "supported_platforms": ["linux", "darwin", "win32"],
+      "required_disk_space_mb": 100,
+      "required_memory_mb": 512
+    }
+  },
+  
+  "reporting": {
+    "formats": ["json", "text"],
+    "default_format": "text",
+    "save_location": ".merge_work/test_reports/",
+    "include_environment_info": true,
+    "include_performance_metrics": true,
+    "include_recommendations": true,
+    "retention_days": 30
+  },
+  
+  "thresholds": {
+    "success_rate": {
+      "excellent": 95.0,
+      "good": 80.0,
+      "poor": 50.0
+    },
+    "performance": {
+      "quick_test_max_seconds": 30,
+      "scenario_test_max_seconds": 300,
+      "full_test_max_seconds": 900
+    },
+    "retry": {
+      "max_retries": 2,
+      "retry_delay_seconds": 5,
+      "retry_on_timeout": true,
+      "retry_on_error": false
+    }
+  },
+  
+  "notifications": {
+    "enabled": false,
+    "on_failure": {
+      "email": false,
+      "slack": false,
+      "console": true
+    },
+    "on_success": {
+      "email": false,
+      "slack": false,
+      "console": true  
+    }
+  },
+  
+  "advanced_options": {
+    "parallel_test_execution": true,
+    "max_parallel_tests": 4,
+    "verbose_output": false,
+    "debug_mode": false,
+    "collect_system_metrics": true,
+    "auto_cleanup": true,
+    "preserve_test_artifacts": false
+  }
+}

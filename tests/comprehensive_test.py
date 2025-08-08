@@ -237,7 +237,7 @@ class ComprehensiveTestSuite:
             from core.legacy_merge_executor import LegacyMergeExecutor
             from core.standard_merge_executor import StandardMergeExecutor
             from core.merge_executor_factory import MergeExecutorFactory
-            from ui.menu_manager import MenuManager
+            from ui.flat_menu_manager import FlatMenuManager
 
             return True
         except ImportError as e:
