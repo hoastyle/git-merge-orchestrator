@@ -36,6 +36,10 @@ def parse_arguments():
   # 指定处理模式和合并策略
   python main.py feature/test main --processing-mode file_level --strategy legacy
 
+  # 非交互式自动化执行（测试和CI/CD）
+  python main.py feature main --auto-plan --quiet        # 自动创建计划
+  python main.py feature main --auto-workflow --quiet    # 自动完整流程
+
 配置管理特性:
   • 🔄 自动配置保存 - 首次运行后自动保存分支和设置信息
   • 📖 自动配置读取 - 后续运行无需参数，自动使用保存的配置
@@ -54,7 +58,7 @@ def parse_arguments():
 扁平化菜单系统:
   • 12个直接功能，1级操作，快速高效
   • 数字1-12直接选择功能，q退出，h帮助
-  
+
 核心功能:
   1. 🚀 快速全流程 - 新用户推荐，一键完成
   2. 🔍 分析分叉 - 分支差异分析
@@ -72,27 +76,17 @@ def parse_arguments():
     )
 
     # 可选的位置参数（支持无参数运行）
-    parser.add_argument(
-        "source_branch", nargs="?", help="源分支名称（可选，未提供时从配置文件读取）"
-    )  # 可选参数
-    parser.add_argument(
-        "target_branch", nargs="?", help="目标分支名称（可选，未提供时从配置文件读取）"
-    )  # 可选参数
+    parser.add_argument("source_branch", nargs="?", help="源分支名称（可选，未提供时从配置文件读取）")  # 可选参数
+    parser.add_argument("target_branch", nargs="?", help="目标分支名称（可选，未提供时从配置文件读取）")  # 可选参数
 
     # 配置管理参数
-    parser.add_argument(
-        "--update-config", action="store_true", help="更新已保存的配置（当提供分支参数时）"
-    )
-    parser.add_argument(
-        "--no-save-config", action="store_true", help="不保存或更新配置（仅本次使用指定参数）"
-    )
+    parser.add_argument("--update-config", action="store_true", help="更新已保存的配置（当提供分支参数时）")
+    parser.add_argument("--no-save-config", action="store_true", help="不保存或更新配置（仅本次使用指定参数）")
     parser.add_argument("--show-config", action="store_true", help="显示当前保存的配置信息")
     parser.add_argument("--reset-config", action="store_true", help="重置（删除）保存的配置")
 
     # 原有参数
-    parser.add_argument(
-        "--max-files", type=int, default=5, help="每组最大文件数 (默认: 5，仅组模式使用)"
-    )
+    parser.add_argument("--max-files", type=int, default=5, help="每组最大文件数 (默认: 5，仅组模式使用)")
     parser.add_argument("--repo", default=".", help="Git仓库路径 (默认: 当前目录)")
     parser.add_argument(
         "--strategy",
@@ -105,9 +99,14 @@ def parse_arguments():
         default="file_level",
         help="处理模式：file_level（文件级处理）或 group_based（传统组模式）（默认: file_level）",
     )
-    parser.add_argument(
-        "--version", action="version", version="Git Merge Orchestrator 2.2 (文件级架构)"
-    )
+    parser.add_argument("--version", action="version", version="Git Merge Orchestrator 2.2 (文件级架构)")
+
+    # 非交互式自动化参数（用于测试和CI/CD）
+    parser.add_argument("--auto-analyze", action="store_true", help="自动执行分叉分析后退出（非交互式）")
+    parser.add_argument("--auto-plan", action="store_true", help="自动创建合并计划后退出（非交互式）")
+    parser.add_argument("--auto-assign", action="store_true", help="自动分配任务后退出（非交互式）")
+    parser.add_argument("--auto-workflow", action="store_true", help="自动执行完整流程后退出（非交互式）")
+    parser.add_argument("--quiet", action="store_true", help="静默模式，减少输出信息")
 
     return parser.parse_args()
 
@@ -172,9 +171,7 @@ def resolve_branches_and_config(args):
     source_branch, target_branch = get_branches_interactively(args.repo)
     if source_branch and target_branch:
         # 保存配置
-        if config_manager.save_config(
-            source_branch, target_branch, args.repo, args.max_files, args.strategy
-        ):
+        if config_manager.save_config(source_branch, target_branch, args.repo, args.max_files, args.strategy):
             print(f"✅ 初始配置已保存，下次可直接运行 'python main.py'")
 
     return source_branch, target_branch, config_manager
@@ -203,10 +200,7 @@ def get_branches_interactively(repo_path):
                 if branch not in branches:
                     branches.append(branch)
 
-        print(
-            f"📋 发现分支: {', '.join(branches[:10])}"
-            + ("..." if len(branches) > 10 else "")
-        )
+        print(f"📋 发现分支: {', '.join(branches[:10])}" + ("..." if len(branches) > 10 else ""))
 
     # 交互式输入
     print(f"\n🎯 请配置分支信息:")
@@ -252,26 +246,26 @@ def show_welcome_banner(orchestrator, config_manager=None):
     strategy_info = orchestrator.get_merge_strategy_info()
     print(f"🔧 当前合并策略: {strategy_info['mode_name']}")
     print(f"📝 策略说明: {strategy_info['description']}")
-    
+
     # 显示增强分析系统状态
-    if hasattr(orchestrator, 'use_enhanced_analysis'):
+    if hasattr(orchestrator, "use_enhanced_analysis"):
         analysis_mode = "增强智能分析 v2.3" if orchestrator.use_enhanced_analysis else "基础分析系统"
         print(f"🧠 分析系统: {analysis_mode}")
         if orchestrator.use_enhanced_analysis:
             print(f"💡 增强特性: 行数权重、时间衰减、一致性评分")
 
     # 显示版本特性
-    version_label = "v2.3" if getattr(orchestrator, 'use_enhanced_analysis', False) else "v2.2"
+    version_label = "v2.3" if getattr(orchestrator, "use_enhanced_analysis", False) else "v2.2"
     print(f"\n🆕 {version_label} 架构特性:")
     print("   • 📁 文件级处理: 更精确的任务分配和进度跟踪")
     print("   • 🔄 双模式支持: 文件级处理 + 传统组模式兼容")
-    
-    if getattr(orchestrator, 'use_enhanced_analysis', False):
+
+    if getattr(orchestrator, "use_enhanced_analysis", False):
         print("   • 🚀 增强分析: 多维度贡献者评分系统")
         print("   • 📊 行数权重: 基于代码变更量的智能分配")
     else:
         print("   • 🎯 智能分配: 基于文件贡献度的精确分配")
-    
+
     print("   • ⚖️ 负载均衡: 自动优化工作负载分布")
     print("   • 📖 自动配置: 后续运行无需参数")
 
@@ -285,12 +279,8 @@ def show_welcome_banner(orchestrator, config_manager=None):
                 # 文件级模式显示
                 stats = summary.get("completion_stats", {})
                 print(f"   总文件: {stats.get('total_files', 0)} 个")
-                print(
-                    f"   已分配: {stats.get('assigned_files', 0)} 个 ({stats.get('assignment_rate', 0):.1f}%)"
-                )
-                print(
-                    f"   已完成: {stats.get('completed_files', 0)} 个 ({stats.get('completion_rate', 0):.1f}%)"
-                )
+                print(f"   已分配: {stats.get('assigned_files', 0)} 个 ({stats.get('assignment_rate', 0):.1f}%)")
+                print(f"   已完成: {stats.get('completed_files', 0)} 个 ({stats.get('completion_rate', 0):.1f}%)")
                 print(f"   待处理: {stats.get('pending_files', 0)} 个")
 
                 workload = summary.get("workload_distribution", {})
@@ -309,12 +299,8 @@ def show_welcome_banner(orchestrator, config_manager=None):
                 stats = summary.get("stats", {})
                 print(f"   总分组: {stats.get('total_groups', 0)} 个")
                 print(f"   总文件: {stats.get('total_files', 0)} 个")
-                print(
-                    f"   已分配: {stats.get('assigned_groups', 0)} 组 ({stats.get('assigned_files', 0)} 文件)"
-                )
-                print(
-                    f"   已完成: {stats.get('completed_groups', 0)} 组 ({stats.get('completed_files', 0)} 文件)"
-                )
+                print(f"   已分配: {stats.get('assigned_groups', 0)} 组 ({stats.get('assigned_files', 0)} 文件)")
+                print(f"   已完成: {stats.get('completed_groups', 0)} 组 ({stats.get('completed_files', 0)} 文件)")
 
                 # 智能建议
                 if stats.get("total_groups", 0) == 0:
@@ -344,21 +330,72 @@ def validate_environment(orchestrator):
         return False
 
     # 检查分支是否存在
-    result = orchestrator.git_ops.run_command(
-        f"git rev-parse --verify {orchestrator.source_branch}"
-    )
+    result = orchestrator.git_ops.run_command(f"git rev-parse --verify {orchestrator.source_branch}")
     if result is None:
         DisplayHelper.print_error(f"源分支 '{orchestrator.source_branch}' 不存在")
         return False
 
-    result = orchestrator.git_ops.run_command(
-        f"git rev-parse --verify {orchestrator.target_branch}"
-    )
+    result = orchestrator.git_ops.run_command(f"git rev-parse --verify {orchestrator.target_branch}")
     if result is None:
         DisplayHelper.print_error(f"目标分支 '{orchestrator.target_branch}' 不存在")
         return False
 
     return True
+
+
+def execute_non_interactive(orchestrator, args):
+    """执行非交互式自动化功能"""
+    from ui.menu_commands import MenuCommands
+
+    # 创建命令执行器
+    commands = MenuCommands(orchestrator)
+
+    try:
+        if args.auto_analyze:
+            if not args.quiet:
+                print("🔍 执行自动分叉分析...")
+            commands.execute_analyze_divergence()
+            if not args.quiet:
+                print("✅ 分叉分析完成")
+            return True
+
+        elif args.auto_plan:
+            if not args.quiet:
+                print("📋 执行自动计划创建...")
+            commands.execute_create_plan()
+            if not args.quiet:
+                print("✅ 合并计划创建完成")
+            return True
+
+        elif args.auto_assign:
+            if not args.quiet:
+                print("⚡ 执行自动任务分配...")
+            commands.execute_auto_assign()
+            if not args.quiet:
+                print("✅ 任务分配完成")
+            return True
+
+        elif args.auto_workflow:
+            if not args.quiet:
+                print("🚀 执行自动完整流程...")
+            # 执行完整流程：分析 -> 创建计划 -> 分配任务
+            commands.execute_analyze_divergence()
+            if not args.quiet:
+                print("  ✅ 分叉分析完成")
+            commands.execute_create_plan()
+            if not args.quiet:
+                print("  ✅ 合并计划创建完成")
+            commands.execute_auto_assign()
+            if not args.quiet:
+                print("✅ 完整流程执行完成")
+            return True
+
+        return False  # 没有匹配的自动化参数
+
+    except Exception as e:
+        if not args.quiet:
+            print(f"❌ 自动化执行失败: {e}")
+        return False
 
 
 def main():
@@ -402,10 +439,23 @@ def main():
         if not validate_environment(orchestrator):
             sys.exit(1)
 
-        # 显示欢迎信息
+        # 检查是否为非交互式自动化执行
+        if args.auto_analyze or args.auto_plan or args.auto_assign or args.auto_workflow:
+            if not args.quiet:
+                # 简化的欢迎信息
+                mode_info = orchestrator.get_processing_mode_info()
+                print(f"🤖 Git Merge Orchestrator 非交互模式 (v2.2 - {mode_info['mode_name']})")
+                print(f"源分支: {orchestrator.source_branch} → 目标分支: {orchestrator.target_branch}")
+                print("=" * 60)
+
+            # 执行非交互式功能
+            success = execute_non_interactive(orchestrator, args)
+            sys.exit(0 if success else 1)
+
+        # 显示欢迎信息（交互式模式）
         show_welcome_banner(orchestrator, config_manager)
 
-        # 启动扁平化菜单
+        # 启动扁平化菜单（交互式模式）
         menu_manager = FlatMenuManager(orchestrator)
         print("🚀 启动扁平化菜单界面...")
         menu_manager.run_interactive_menu()
